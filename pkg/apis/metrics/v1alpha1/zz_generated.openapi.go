@@ -376,8 +376,8 @@ func schema_pkg_apis_metrics_v1alpha1_Webhook(ref common.ReferenceCallback) comm
 					"port": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Service port the webserver serves on",
-							Type:        []string{"string"},
-							Format:      "",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
 					"path": {

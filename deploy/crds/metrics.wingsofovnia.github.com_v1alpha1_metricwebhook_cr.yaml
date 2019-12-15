@@ -8,7 +8,7 @@ spec:
       app: hello-node
   webhook:
     service: metric-webhook-listener
-    port: "8080"
+    port: 8080
     path: /metrics/alerts
   scrapeInterval: 20s
   metrics:

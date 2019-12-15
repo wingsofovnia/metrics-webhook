@@ -27,7 +27,7 @@ type Webhook struct {
 	// Kind of the referent service
 	Service string `json:"service"`
 	// Service port the webserver serves on
-	Port string `json:"port"`
+	Port int `json:"port"`
 	// URL path to the webhook
 	Path string `json:"path"`
 }

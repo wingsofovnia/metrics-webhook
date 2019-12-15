@@ -144,7 +144,7 @@ spec:
                   type: string
                 port:
                   description: Service port the webserver serves on
-                  type: string
+                  type: integer
                 service:
                   description: Kind of the referent service
                   type: string
