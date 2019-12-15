@@ -60,3 +60,7 @@ rules:
       - '*'
     verbs:
       - '*'
+  - apiGroups:
+      -  metrics.k8s.io
+    resources: ["*"]
+    verbs: ["*"]
