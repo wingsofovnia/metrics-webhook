@@ -3,5 +3,16 @@ kind: MetricWebhook
 metadata:
   name: example-metricwebhook
 spec:
-  # Add fields here
-  size: 3
+  selector:
+    matchLabels:
+      app: hello-node
+  webhook:
+    service: metric-webhook-listener
+    port: "8080"
+    path: /metrics/alerts
+  scrapeInterval: 20s
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        targetAverageUtilization: 50
