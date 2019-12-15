@@ -83,6 +83,9 @@ spec:
                     description: type is the type of metric source.  It should be
                       "Pods" or "Resource", each mapping to a matching field in the
                       object.
+                    enum:
+                    - Pods
+                    - Resource
                     type: string
                 required:
                 - type
@@ -221,6 +224,9 @@ spec:
                     description: type is the type of metric source.  It should be
                       "Pods" or "Resource", each mapping to a matching field in the
                       object.
+                    enum:
+                    - Pods
+                    - Resource
                     type: string
                 required:
                 - type

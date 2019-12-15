@@ -33,6 +33,7 @@ type Webhook struct {
 }
 
 // +k8s:openapi-gen=true
+// +kubebuilder:validation:Enum=Pods;Resource
 // MetricSourceType indicates the type of metric.
 type MetricSourceType string
 
