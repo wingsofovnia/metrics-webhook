@@ -17,17 +17,194 @@ spec:
       description: MetricWebhook is the Schema for the metricwebhooks API
       properties:
         apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
           type: string
         kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
         spec:
+          description: MetricWebhookSpec defines the desired state of MetricWebhook
+          properties:
+            metrics:
+              description: metrics contains the specifications for metrics thresholds
+                used to trigger webhook
+              items:
+                description: MetricSpec specifies metrics thresholds before webhook
+                  gets called
+                properties:
+                  pods:
+                    description: pods refers to a metric describing each pod in the
+                      current scale target (for example, transactions-processed-per-second).
+                      The values will be averaged together before being compared to
+                      the target value.
+                    properties:
+                      metricName:
+                        description: metricName is the name of the metric in question
+                        type: string
+                      targetAverageValue:
+                        description: targetAverageValue is the target value of the
+                          average of the metric across all relevant pods (as a quantity)
+                        type: string
+                    required:
+                    - metricName
+                    - targetAverageValue
+                    type: object
+                  resource:
+                    description: resource refers to a resource metric (such as those
+                      specified in requests and limits) known to Kubernetes describing
+                      each pod in the current target (e.g. CPU or memory).
+                    properties:
+                      name:
+                        description: name is the name of the resource in question.
+                        type: string
+                      targetAverageUtilization:
+                        description: targetAverageUtilization is the target value
+                          of the average of the resource metric across all relevant
+                          pods, represented as a percentage of the requested value
+                          of the resource for the pods.
+                        format: int32
+                        type: integer
+                      targetAverageValue:
+                        description: targetAverageValue is the target value of the
+                          average of the resource metric across all relevant pods,
+                          as a raw value (instead of as a percentage of the request),
+                          similar to the "pods" metric source type.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  type:
+                    description: type is the type of metric source.  It should be
+                      "Pods" or "Resource", each mapping to a matching field in the
+                      object.
+                    type: string
+                required:
+                - type
+                type: object
+              type: array
+            scrapeInterval:
+              description: scrapeInterval defines how frequently to scrape metrics
+              type: string
+            targetRef:
+              description: targetRef points to the target resource used to fetch pods
+                for which metrics should be collected
+              properties:
+                kind:
+                  description: 'Kind of the referent; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds"'
+                  type: string
+                name:
+                  description: 'Name of the referent; More info: http://kubernetes.io/docs/user-guide/identifiers#names'
+                  type: string
+              required:
+              - kind
+              - name
+              type: object
+            webhook:
+              description: webhook points to the web endpoint that going to get metric
+                alerts
+              properties:
+                path:
+                  description: URL path to the webhook
+                  type: string
+                port:
+                  description: Service port the webserver serves on
+                  type: string
+                service:
+                  description: Kind of the referent service
+                  type: string
+              required:
+              - path
+              - port
+              - service
+              type: object
+          required:
+          - metrics
+          - scrapeInterval
+          - targetRef
+          - webhook
           type: object
         status:
+          description: MetricWebhookStatus defines the observed state of MetricWebhook
+          properties:
+            currentMetrics:
+              description: currentMetrics is the last read state of the metrics used
+                by this MetricWebhook.
+              items:
+                description: MetricStatus describes the last-read state of a single
+                  metric.
+                properties:
+                  pods:
+                    description: pods refers to a metric describing each pod in the
+                      current target (for example, transactions-processed-per-second).
+                      The values will be averaged together before being compared to
+                      the target value.
+                    properties:
+                      currentAverageValue:
+                        description: currentAverageValue is the current value of the
+                          average of the metric across all relevant pods (as a quantity)
+                        type: string
+                      metricName:
+                        description: metricName is the name of the metric in question
+                        type: string
+                    required:
+                    - currentAverageValue
+                    - metricName
+                    type: object
+                  resource:
+                    description: resource refers to a resource metric (such as those
+                      specified in requests and limits) known to Kubernetes describing
+                      each pod in the current target (e.g. CPU or memory). Such metrics
+                      are built in to Kubernetes, and have special scaling options
+                      on top of those available to normal per-pod metrics using the
+                      "pods" source.
+                    properties:
+                      currentAverageUtilization:
+                        description: currentAverageUtilization is the current value
+                          of the average of the resource metric across all relevant
+                          pods, represented as a percentage of the requested value
+                          of the resource for the pods.  It will only be present if
+                          `targetAverageValue` was set in the corresponding metric
+                          specification.
+                        format: int32
+                        type: integer
+                      currentAverageValue:
+                        description: currentAverageValue is the current value of the
+                          average of the resource metric across all relevant pods,
+                          as a raw value (instead of as a percentage of the request),
+                          similar to the "pods" metric source type. It will always
+                          be set, regardless of the corresponding metric specification.
+                        type: string
+                      name:
+                        description: name is the name of the resource in question.
+                        type: string
+                    required:
+                    - currentAverageValue
+                    - name
+                    type: object
+                  type:
+                    description: type is the type of metric source.  It should be
+                      "Pods" or "Resource", each mapping to a matching field in the
+                      object.
+                    type: string
+                required:
+                - type
+                type: object
+              type: array
+            lastScrapeTime:
+              description: lastScrapeTime is the last time the MetricWebhook scraped
+                metrics
+              format: date-time
+              type: string
           type: object
       type: object
+  version: v1alpha1
   versions:
-    - name: v1alpha1
-      served: true
-      storage: true
+  - name: v1alpha1
+    served: true
+    storage: true
