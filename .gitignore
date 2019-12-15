@@ -1,0 +1,31 @@
+# Operator Temporary Build Files
+build/_output
+build/_test
+
+# Created by https://www.gitignore.io/api/go,macos,intellij
+
+### Go ###
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+### Intellij ###
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+.idea_modules/
+.ijwb
+
+### macOS ###
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+

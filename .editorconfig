@@ -1,0 +1,44 @@
+; http://editorconfig.org/
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Go
+# https://golang.org/cmd/gofmt/
+[{go.mod, go.sum, *.go}]
+indent_style = tab
+tab_width = 4
+
+# Shell
+# https://google.github.io/styleguide/shell.xml#Indentation
+[*.{bash, sh, zsh}]
+indent_size = 2
+indent_style = space
+
+# JSON
+# https://google.github.io/styleguide/jsguide.html#formatting-block-indentation
+[*.json]
+indent_size = 2
+indent_style = space
+
+# Markdown
+[*.md]
+indent_style = space
+indent_size = 4
+
+# Javascript
+# https://google.github.io/styleguide/jsguide.html#formatting-block-indentation
+[*.js]
+indent_size = 2
+indent_style = space
+
+# YAML
+# http://yaml.org/spec/1.2/2009-07-21/spec.html#id2576668
+[*.{yaml, yml, gotmpl}]
+indent_size = 2
+indent_style = space
