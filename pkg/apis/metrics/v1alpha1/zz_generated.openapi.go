@@ -20,7 +20,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"./pkg/apis/metrics/v1alpha1.PodsMetricStatus":     schema_pkg_apis_metrics_v1alpha1_PodsMetricStatus(ref),
 		"./pkg/apis/metrics/v1alpha1.ResourceMetricSource": schema_pkg_apis_metrics_v1alpha1_ResourceMetricSource(ref),
 		"./pkg/apis/metrics/v1alpha1.ResourceMetricStatus": schema_pkg_apis_metrics_v1alpha1_ResourceMetricStatus(ref),
-		"./pkg/apis/metrics/v1alpha1.TargetRef":            schema_pkg_apis_metrics_v1alpha1_TargetRef(ref),
 		"./pkg/apis/metrics/v1alpha1.Webhook":              schema_pkg_apis_metrics_v1alpha1_Webhook(ref),
 	}
 }
@@ -41,13 +40,13 @@ func schema_pkg_apis_metrics_v1alpha1_MetricSpec(ref common.ReferenceCallback) c
 					},
 					"pods": {
 						SchemaProps: spec.SchemaProps{
-							Description: "pods refers to a metric describing each pod in the current scale target (for example, transactions-processed-per-second). The values will be averaged together before being compared to the target value.",
+							Description: "pods refers to a metric describing each pod matching the selector (for example, transactions-processed-per-second). The values will be averaged together before being compared to the target value.",
 							Ref:         ref("./pkg/apis/metrics/v1alpha1.PodsMetricSource"),
 						},
 					},
 					"resource": {
 						SchemaProps: spec.SchemaProps{
-							Description: "resource refers to a resource metric (such as those specified in requests and limits) known to Kubernetes describing each pod in the current target (e.g. CPU or memory).",
+							Description: "resource refers to a resource metric (such as those specified in requests and limits) known to Kubernetes describing each pod matching the selector (e.g. CPU or memory).",
 							Ref:         ref("./pkg/apis/metrics/v1alpha1.ResourceMetricSource"),
 						},
 					},
@@ -76,13 +75,13 @@ func schema_pkg_apis_metrics_v1alpha1_MetricStatus(ref common.ReferenceCallback)
 					},
 					"pods": {
 						SchemaProps: spec.SchemaProps{
-							Description: "pods refers to a metric describing each pod in the current target (for example, transactions-processed-per-second). The values will be averaged together before being compared to the target value.",
+							Description: "pods refers to a metric describing each pod matching the selector (for example, transactions-processed-per-second). The values will be averaged together before being compared to the target value.",
 							Ref:         ref("./pkg/apis/metrics/v1alpha1.PodsMetricStatus"),
 						},
 					},
 					"resource": {
 						SchemaProps: spec.SchemaProps{
-							Description: "resource refers to a resource metric (such as those specified in requests and limits) known to Kubernetes describing each pod in the current target (e.g. CPU or memory). Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the \"pods\" source.",
+							Description: "resource refers to a resource metric (such as those specified in requests and limits) known to Kubernetes describing each pod matching the selector (e.g. CPU or memory). Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the \"pods\" source.",
 							Ref:         ref("./pkg/apis/metrics/v1alpha1.ResourceMetricStatus"),
 						},
 					},
@@ -146,10 +145,10 @@ func schema_pkg_apis_metrics_v1alpha1_MetricWebhookSpec(ref common.ReferenceCall
 				Description: "MetricWebhookSpec defines the desired state of MetricWebhook",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"targetRef": {
+					"selector": {
 						SchemaProps: spec.SchemaProps{
-							Description: "targetRef points to the target resource used to fetch pods for which metrics should be collected",
-							Ref:         ref("./pkg/apis/metrics/v1alpha1.TargetRef"),
+							Description: "Selector is a label selector for pods for which metrics should be collected",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector"),
 						},
 					},
 					"webhook": {
@@ -183,11 +182,11 @@ func schema_pkg_apis_metrics_v1alpha1_MetricWebhookSpec(ref common.ReferenceCall
 						},
 					},
 				},
-				Required: []string{"targetRef", "webhook", "metrics", "scrapeInterval"},
+				Required: []string{"selector", "webhook", "metrics", "scrapeInterval"},
 			},
 		},
 		Dependencies: []string{
-			"./pkg/apis/metrics/v1alpha1.MetricSpec", "./pkg/apis/metrics/v1alpha1.TargetRef", "./pkg/apis/metrics/v1alpha1.Webhook", "k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
+			"./pkg/apis/metrics/v1alpha1.MetricSpec", "./pkg/apis/metrics/v1alpha1.Webhook", "k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector"},
 	}
 }
 
@@ -234,12 +233,12 @@ func schema_pkg_apis_metrics_v1alpha1_PodsMetricSource(ref common.ReferenceCallb
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "PodsMetricSource indicates when to call webhook on a metric describing each pod in the current target (for example, transactions-processed-per-second). The values will be averaged together before being compared to the target value.",
+				Description: "PodsMetricSource indicates when to call webhook on a metric describing each pod matching the selector (for example, transactions-processed-per-second). The values will be averaged together before being compared to the target value.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"metricName": {
+					"name": {
 						SchemaProps: spec.SchemaProps{
-							Description: "metricName is the name of the metric in question",
+							Description: "name is the name of the metric in question",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -251,7 +250,7 @@ func schema_pkg_apis_metrics_v1alpha1_PodsMetricSource(ref common.ReferenceCallb
 						},
 					},
 				},
-				Required: []string{"metricName", "targetAverageValue"},
+				Required: []string{"name", "targetAverageValue"},
 			},
 		},
 		Dependencies: []string{
@@ -263,12 +262,12 @@ func schema_pkg_apis_metrics_v1alpha1_PodsMetricStatus(ref common.ReferenceCallb
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "PodsMetricStatus indicates the current value of a metric describing each pod in the current scale target (for example, transactions-processed-per-second).",
+				Description: "PodsMetricStatus indicates the current value of a metric describing each pod matching the selector (for example, transactions-processed-per-second).",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"metricName": {
+					"name": {
 						SchemaProps: spec.SchemaProps{
-							Description: "metricName is the name of the metric in question",
+							Description: "name is the name of the metric in question",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -280,7 +279,7 @@ func schema_pkg_apis_metrics_v1alpha1_PodsMetricStatus(ref common.ReferenceCallb
 						},
 					},
 				},
-				Required: []string{"metricName", "currentAverageValue"},
+				Required: []string{"name", "currentAverageValue"},
 			},
 		},
 		Dependencies: []string{
@@ -292,7 +291,7 @@ func schema_pkg_apis_metrics_v1alpha1_ResourceMetricSource(ref common.ReferenceC
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ResourceMetricSource indicates when to call webhook on a resource metric known to Kubernetes, as specified in requests and limits, describing each pod in the current target (e.g. CPU or memory). The values will be averaged together before being compared to the target",
+				Description: "ResourceMetricSource indicates when to call webhook on a resource metric known to Kubernetes, as specified in requests and limits, describing each pod matching the selector (e.g. CPU or memory). The values will be averaged together before being compared to the target value.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"name": {
@@ -328,7 +327,7 @@ func schema_pkg_apis_metrics_v1alpha1_ResourceMetricStatus(ref common.ReferenceC
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ResourceMetricStatus indicates the current value of a resource metric known to Kubernetes, as specified in requests and limits, describing each pod in the current target (e.g. CPU or memory). Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the \"pods\" source.",
+				Description: "ResourceMetricStatus indicates the current value of a resource metric known to Kubernetes, as specified in requests and limits, describing each pod matching the selector (e.g. CPU or memory). Such metrics are built in to Kubernetes, and have special scaling options on top of those available to normal per-pod metrics using the \"pods\" source.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"name": {
@@ -357,34 +356,6 @@ func schema_pkg_apis_metrics_v1alpha1_ResourceMetricStatus(ref common.ReferenceC
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
-	}
-}
-
-func schema_pkg_apis_metrics_v1alpha1_TargetRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "TargetRef points to deployment or pod to watch metrics for",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"kind": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Kind of the referent; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds\"",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"name": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Name of the referent; More info: http://kubernetes.io/docs/user-guide/identifiers#names",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-				},
-				Required: []string{"kind", "name"},
-			},
-		},
 	}
 }
 

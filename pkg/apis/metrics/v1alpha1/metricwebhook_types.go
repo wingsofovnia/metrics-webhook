@@ -9,9 +9,8 @@ import (
 // MetricWebhookSpec defines the desired state of MetricWebhook
 // +k8s:openapi-gen=true
 type MetricWebhookSpec struct {
-	// targetRef points to the target resource used to fetch pods
-	// for which metrics should be collected
-	TargetRef TargetRef `json:"targetRef"`
+	// Selector is a label selector for pods for which metrics should be collected
+	Selector metav1.LabelSelector `json:"selector"`
 	// webhook points to the web endpoint that going to get metric alerts
 	Webhook Webhook `json:"webhook"`
 	// metrics contains the specifications for metrics thresholds
@@ -20,15 +19,6 @@ type MetricWebhookSpec struct {
 	Metrics []MetricSpec `json:"metrics"`
 	// scrapeInterval defines how frequently to scrape metrics
 	ScrapeInterval metav1.Duration `json:"scrapeInterval"`
-}
-
-// TargetRef points to deployment or pod to watch metrics for
-// +k8s:openapi-gen=true
-type TargetRef struct {
-	// Kind of the referent; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds"
-	Kind string `json:"kind"`
-	// Name of the referent; More info: http://kubernetes.io/docs/user-guide/identifiers#names
-	Name string `json:"name"`
 }
 
 // Webhook describes the web endpoint that the operator calls on metrics reaching their thresholds
@@ -64,35 +54,34 @@ type MetricSpec struct {
 	// each mapping to a matching field in the object.
 	Type MetricSourceType `json:"type"`
 
-	// pods refers to a metric describing each pod in the current scale target
+	// pods refers to a metric describing each pod matching the selector
 	// (for example, transactions-processed-per-second). The values will be
 	// averaged together before being compared to the target value.
 	// +optional
 	Pods *PodsMetricSource `json:"pods,omitempty"`
 	// resource refers to a resource metric (such as those specified in
-	// requests and limits) known to Kubernetes describing each pod in the
-	// current target (e.g. CPU or memory).
+	// requests and limits) known to Kubernetes describing each pod matching
+	// the selector (e.g. CPU or memory).
 	// +optional
 	Resource *ResourceMetricSource `json:"resource,omitempty"`
 }
 
-// PodsMetricSource indicates when to call webhook on a metric describing each pod in
-// the current target (for example, transactions-processed-per-second).
-// The values will be averaged together before being compared to the target
-// value.
+// PodsMetricSource indicates when to call webhook on a metric describing each pod
+// matching the selector (for example, transactions-processed-per-second).
+// The values will be averaged together before being compared to the target value.
 // +k8s:openapi-gen=true
 type PodsMetricSource struct {
-	// metricName is the name of the metric in question
-	MetricName string `json:"metricName"`
+	// name is the name of the metric in question
+	Name string `json:"name"`
 	// targetAverageValue is the target value of the average of the
 	// metric across all relevant pods (as a quantity)
 	TargetAverageValue resource.Quantity `json:"targetAverageValue"`
 }
 
 // ResourceMetricSource indicates when to call webhook on a resource metric known to
-// Kubernetes, as specified in requests and limits, describing each pod in the
-// current target (e.g. CPU or memory).
-// The values will be averaged together before being compared to the target
+// Kubernetes, as specified in requests and limits, describing each pod
+// matching the selector (e.g. CPU or memory).
+// The values will be averaged together before being compared to the target value.
 // +k8s:openapi-gen=true
 type ResourceMetricSource struct {
 	// name is the name of the resource in question.
@@ -127,34 +116,34 @@ type MetricStatus struct {
 	// type is the type of metric source.  It should be "Pods" or "Resource",
 	// each mapping to a matching field in the object.
 	Type MetricSourceType `json:"type"`
-	// pods refers to a metric describing each pod in the current target
+	// pods refers to a metric describing each pod matching the selector
 	// (for example, transactions-processed-per-second). The values will be
 	// averaged together before being compared to the target value.
 	// +optional
 	Pods *PodsMetricStatus `json:"pods,omitempty"`
 	// resource refers to a resource metric (such as those specified in
-	// requests and limits) known to Kubernetes describing each pod in the
-	// current target (e.g. CPU or memory). Such metrics are built in to
+	// requests and limits) known to Kubernetes describing each pod
+	// matching the selector (e.g. CPU or memory). Such metrics are built in to
 	// Kubernetes, and have special scaling options on top of those available
 	// to normal per-pod metrics using the "pods" source.
 	// +optional
 	Resource *ResourceMetricStatus `json:"resource,omitempty"`
 }
 
-// PodsMetricStatus indicates the current value of a metric describing each pod in
-// the current scale target (for example, transactions-processed-per-second).
+// PodsMetricStatus indicates the current value of a metric describing each pod
+// matching the selector (for example, transactions-processed-per-second).
 // +k8s:openapi-gen=true
 type PodsMetricStatus struct {
-	// metricName is the name of the metric in question
-	MetricName string `json:"metricName"`
+	// name is the name of the metric in question
+	Name string `json:"name"`
 	// currentAverageValue is the current value of the average of the
 	// metric across all relevant pods (as a quantity)
 	CurrentAverageValue resource.Quantity `json:"currentAverageValue"`
 }
 
 // ResourceMetricStatus indicates the current value of a resource metric known to
-// Kubernetes, as specified in requests and limits, describing each pod in the
-// current target (e.g. CPU or memory). Such metrics are built in to
+// Kubernetes, as specified in requests and limits, describing each pod
+// matching the selector (e.g. CPU or memory). Such metrics are built in to
 // Kubernetes, and have special scaling options on top of those available to
 // normal per-pod metrics using the "pods" source.
 // +k8s:openapi-gen=true

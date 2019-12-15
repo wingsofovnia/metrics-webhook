@@ -39,26 +39,26 @@ spec:
                   gets called
                 properties:
                   pods:
-                    description: pods refers to a metric describing each pod in the
-                      current scale target (for example, transactions-processed-per-second).
+                    description: pods refers to a metric describing each pod matching
+                      the selector (for example, transactions-processed-per-second).
                       The values will be averaged together before being compared to
                       the target value.
                     properties:
-                      metricName:
-                        description: metricName is the name of the metric in question
+                      name:
+                        description: name is the name of the metric in question
                         type: string
                       targetAverageValue:
                         description: targetAverageValue is the target value of the
                           average of the metric across all relevant pods (as a quantity)
                         type: string
                     required:
-                    - metricName
+                    - name
                     - targetAverageValue
                     type: object
                   resource:
                     description: resource refers to a resource metric (such as those
                       specified in requests and limits) known to Kubernetes describing
-                      each pod in the current target (e.g. CPU or memory).
+                      each pod matching the selector (e.g. CPU or memory).
                     properties:
                       name:
                         description: name is the name of the resource in question.
@@ -91,19 +91,49 @@ spec:
             scrapeInterval:
               description: scrapeInterval defines how frequently to scrape metrics
               type: string
-            targetRef:
-              description: targetRef points to the target resource used to fetch pods
-                for which metrics should be collected
+            selector:
+              description: Selector is a label selector for pods for which metrics
+                should be collected
               properties:
-                kind:
-                  description: 'Kind of the referent; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds"'
-                  type: string
-                name:
-                  description: 'Name of the referent; More info: http://kubernetes.io/docs/user-guide/identifiers#names'
-                  type: string
-              required:
-              - kind
-              - name
+                matchExpressions:
+                  description: matchExpressions is a list of label selector requirements.
+                    The requirements are ANDed.
+                  items:
+                    description: A label selector requirement is a selector that contains
+                      values, a key, and an operator that relates the key and values.
+                    properties:
+                      key:
+                        description: key is the label key that the selector applies
+                          to.
+                        type: string
+                      operator:
+                        description: operator represents a key's relationship to a
+                          set of values. Valid operators are In, NotIn, Exists and
+                          DoesNotExist.
+                        type: string
+                      values:
+                        description: values is an array of string values. If the operator
+                          is In or NotIn, the values array must be non-empty. If the
+                          operator is Exists or DoesNotExist, the values array must
+                          be empty. This array is replaced during a strategic merge
+                          patch.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - key
+                    - operator
+                    type: object
+                  type: array
+                matchLabels:
+                  additionalProperties:
+                    type: string
+                  description: matchLabels is a map of {key,value} pairs. A single
+                    {key,value} in the matchLabels map is equivalent to an element
+                    of matchExpressions, whose key field is "key", the operator is
+                    "In", and the values array contains only "value". The requirements
+                    are ANDed.
+                  type: object
               type: object
             webhook:
               description: webhook points to the web endpoint that going to get metric
@@ -126,7 +156,7 @@ spec:
           required:
           - metrics
           - scrapeInterval
-          - targetRef
+          - selector
           - webhook
           type: object
         status:
@@ -140,8 +170,8 @@ spec:
                   metric.
                 properties:
                   pods:
-                    description: pods refers to a metric describing each pod in the
-                      current target (for example, transactions-processed-per-second).
+                    description: pods refers to a metric describing each pod matching
+                      the selector (for example, transactions-processed-per-second).
                       The values will be averaged together before being compared to
                       the target value.
                     properties:
@@ -149,17 +179,17 @@ spec:
                         description: currentAverageValue is the current value of the
                           average of the metric across all relevant pods (as a quantity)
                         type: string
-                      metricName:
-                        description: metricName is the name of the metric in question
+                      name:
+                        description: name is the name of the metric in question
                         type: string
                     required:
                     - currentAverageValue
-                    - metricName
+                    - name
                     type: object
                   resource:
                     description: resource refers to a resource metric (such as those
                       specified in requests and limits) known to Kubernetes describing
-                      each pod in the current target (e.g. CPU or memory). Such metrics
+                      each pod matching the selector (e.g. CPU or memory). Such metrics
                       are built in to Kubernetes, and have special scaling options
                       on top of those available to normal per-pod metrics using the
                       "pods" source.
