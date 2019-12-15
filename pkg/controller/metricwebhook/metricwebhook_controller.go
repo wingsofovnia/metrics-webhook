@@ -3,7 +3,6 @@ package metricwebhook
 import (
 	"context"
 	"fmt"
-
 	metricsv1alpha1 "github.com/wingsofovnia/metrics-webhook/pkg/apis/metrics/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -113,16 +112,17 @@ func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile
 			"request.NamespacedName", request.NamespacedName,
 			"Spec.Selector", metricWebhook.Spec.Selector,
 			"scrapeTime", scrapeTime.Time,
-			)
+		)
 		return reconcile.Result{}, err
 	}
 
-	metricWebhook.Status.CurrentMetrics = metricStatuses
-	metricWebhook.Status.LastScrapeTime = &scrapeTime
-
 	// TODO: call webhook
 
-	err = r.client.Update(context.TODO(), metricWebhook)
+	metricWebhook.Status = metricsv1alpha1.MetricWebhookStatus{
+		LastScrapeTime: &scrapeTime,
+		CurrentMetrics: metricStatuses,
+	}
+	err = r.client.Status().Update(context.TODO(), metricWebhook)
 	if err != nil {
 		reqLogger.Error(err, "failed to update MetricWebhook status",
 			"request.NamespacedName", request.NamespacedName)
@@ -136,7 +136,7 @@ func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile
 }
 
 func (r *ReconcileMetricWebhook) fetchCurrentMetrics(metricSpecs []metricsv1alpha1.MetricSpec, namespace string, labelSelector metav1.LabelSelector) ([]metricsv1alpha1.MetricStatus, error) {
-	metricStatuses := make([]metricsv1alpha1.MetricStatus, len(metricSpecs))
+	var metricStatuses []metricsv1alpha1.MetricStatus
 	for _, metricSpec := range metricSpecs {
 		metricStatus, err := r.fetchCurrentMetric(metricSpec, namespace, labelSelector)
 		if err != nil {
