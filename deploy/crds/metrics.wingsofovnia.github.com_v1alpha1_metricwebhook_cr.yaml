@@ -1,0 +1,7 @@
+apiVersion: metrics.wingsofovnia.github.com/v1alpha1
+kind: MetricWebhook
+metadata:
+  name: example-metricwebhook
+spec:
+  # Add fields here
+  size: 3
