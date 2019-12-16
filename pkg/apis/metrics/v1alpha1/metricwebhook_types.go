@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"time"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,11 +26,17 @@ type MetricWebhookSpec struct {
 // Webhook describes the web endpoint that the operator calls on metrics reaching their thresholds
 // +k8s:openapi-gen=true
 type Webhook struct {
-	// Kind of the referent service
+	// Explicit URL to hit, instead of matching service
+	// +optional
+	Url string `json:"url"`
+	// Referent service
+	// +optional
 	Service string `json:"service"`
 	// Service port the webserver serves on
-	Port int `json:"port"`
+	// +optional
+	Port int32 `json:"port"`
 	// URL path to the webhook
+	// +optional
 	Path string `json:"path"`
 }
 
@@ -129,6 +137,9 @@ type MetricStatus struct {
 	// to normal per-pod metrics using the "pods" source.
 	// +optional
 	Resource *ResourceMetricStatus `json:"resource,omitempty"`
+	// scrapeTime is the last time the MetricWebhook scraped metrics
+	// +optional
+	ScrapeTime metav1.Time `json:"scrapeTime,omitempty"`
 }
 
 // PodsMetricStatus indicates the current value of a metric describing each pod
@@ -186,6 +197,19 @@ type MetricWebhookList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []MetricWebhook `json:"items"`
+}
+
+// +k8s:deepcopy-gen=false
+// +k8s:openapi-gen=false
+// +kubebuilder:skipversion
+type MetricAlert struct {
+	Type                      MetricSourceType   `json:"type"`
+	Name                      string             `json:"name"`
+	CurrentAverageValue       resource.Quantity  `json:"currentAverageValue,omitempty"`
+	TargetAverageValue        *resource.Quantity `json:"targetAverageValue,omitempty"`
+	CurrentAverageUtilization *int32             `json:"currentAverageUtilization,omitempty"`
+	TargetAverageUtilization  *int32             `json:"targetAverageUtilization,omitempty"`
+	ScrapeTime                time.Time          `json:"scrapeTime"`
 }
 
 func init() {

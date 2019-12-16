@@ -85,12 +85,18 @@ func schema_pkg_apis_metrics_v1alpha1_MetricStatus(ref common.ReferenceCallback)
 							Ref:         ref("./pkg/apis/metrics/v1alpha1.ResourceMetricStatus"),
 						},
 					},
+					"scrapeTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "scrapeTime is the last time the MetricWebhook scraped metrics",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
 				},
 				Required: []string{"type"},
 			},
 		},
 		Dependencies: []string{
-			"./pkg/apis/metrics/v1alpha1.PodsMetricStatus", "./pkg/apis/metrics/v1alpha1.ResourceMetricStatus"},
+			"./pkg/apis/metrics/v1alpha1.PodsMetricStatus", "./pkg/apis/metrics/v1alpha1.ResourceMetricStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
 	}
 }
 
@@ -366,9 +372,16 @@ func schema_pkg_apis_metrics_v1alpha1_Webhook(ref common.ReferenceCallback) comm
 				Description: "Webhook describes the web endpoint that the operator calls on metrics reaching their thresholds",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Explicit URL to hit, instead of matching service",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"service": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Kind of the referent service",
+							Description: "Referent service",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -388,7 +401,6 @@ func schema_pkg_apis_metrics_v1alpha1_Webhook(ref common.ReferenceCallback) comm
 						},
 					},
 				},
-				Required: []string{"service", "port", "path"},
 			},
 		},
 	}

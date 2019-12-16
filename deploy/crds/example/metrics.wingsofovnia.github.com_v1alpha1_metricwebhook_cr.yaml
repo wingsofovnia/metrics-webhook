@@ -5,9 +5,13 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: httpd
+      # kubectl run php-apache --image=k8s.gcr.io/hpa-example --requests=cpu=200m --limits=cpu=500m --expose --port=80
+      # kubectl run --generator=run-pod/v1 -it --rm load-generator --image=busybox /bin/sh
+      # while true; do wget -q -O- http://php-apache.default.svc.cluster.local; done
+      run: php-apache
   webhook:
-    service: metric-webhook-listener
+    # kubectl run echo --image=docker.io/inanimate/echo-server --expose --port=8080
+    service: echo
     port: 8080
     path: /metrics/alerts
   scrapeInterval: 20s

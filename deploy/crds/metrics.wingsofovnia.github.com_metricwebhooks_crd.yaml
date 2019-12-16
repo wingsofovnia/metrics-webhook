@@ -147,14 +147,14 @@ spec:
                   type: string
                 port:
                   description: Service port the webserver serves on
+                  format: int32
                   type: integer
                 service:
-                  description: Kind of the referent service
+                  description: Referent service
                   type: string
-              required:
-              - path
-              - port
-              - service
+                url:
+                  description: Explicit URL to hit, instead of matching service
+                  type: string
               type: object
           required:
           - metrics
@@ -220,6 +220,11 @@ spec:
                     - currentAverageValue
                     - name
                     type: object
+                  scrapeTime:
+                    description: scrapeTime is the last time the MetricWebhook scraped
+                      metrics
+                    format: date-time
+                    type: string
                   type:
                     description: type is the type of metric source.  It should be
                       "Pods" or "Resource", each mapping to a matching field in the

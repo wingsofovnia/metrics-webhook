@@ -48,28 +48,28 @@ func (f *MetricValuesClient) GetCurrentResourceAverageValue(name v1.ResourceName
 	return *resource.NewMilliQuantity(currentUtilization, resource.DecimalSI), nil
 }
 
-func (f *MetricValuesClient) GetCurrentResourceAverageUtilization(name v1.ResourceName, namespace string, labelSelector metav1.LabelSelector, targetAverageUtilization int32) (averageUtilization int32, err error) {
+func (f *MetricValuesClient) GetCurrentResourceAverageUtilization(name v1.ResourceName, namespace string, labelSelector metav1.LabelSelector, targetAverageUtilization int32) (averageUtilization int32, averageValue resource.Quantity, err error) {
 	podSelector, err := metav1.LabelSelectorAsSelector(&labelSelector)
 	if err != nil {
-		return 0, err
+		return 0, resource.Quantity{}, err
 	}
 
 	// Get all matching pods
 	podLabels, err := metav1.LabelSelectorAsMap(&labelSelector)
 	if err != nil {
-		return 0, err
+		return 0, resource.Quantity{}, err
 	}
 	allPods, err := f.k8sClient.CoreV1().Pods(namespace).List(metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(podLabels).String(),
 	})
 	if err != nil {
-		return 0, err
+		return 0, resource.Quantity{}, err
 	}
 
 	// Get pod metrics
 	metrics, _, err := f.metricsClient.GetResourceMetric(name, namespace, podSelector)
 	if err != nil {
-		return 0, err
+		return 0, resource.Quantity{}, err
 	}
 
 	// Filter out pods that are either not running or not present in metrics
@@ -86,11 +86,11 @@ func (f *MetricValuesClient) GetCurrentResourceAverageUtilization(name v1.Resour
 
 	requests, err := calculatePodRequests(eligiblePods, name)
 	if err != nil {
-		return 0, err
+		return 0, resource.Quantity{}, err
 	}
 
-	_, utilization, _, err := metricsclient.GetResourceUtilizationRatio(metrics, requests, targetAverageUtilization)
-	return utilization, err
+	_, utilization, rawUtilization, err := metricsclient.GetResourceUtilizationRatio(metrics, requests, targetAverageUtilization)
+	return utilization, *resource.NewMilliQuantity(rawUtilization, resource.DecimalSI), err
 }
 
 // Source: https://github.com/kubernetes/kubernetes/blob/928817a26a84d9e3076d110ea30ba994912aa477/pkg/controller/podautoscaler/replica_calculator.go#L405

@@ -47,6 +47,7 @@ func (in *MetricStatus) DeepCopyInto(out *MetricStatus) {
 		*out = new(ResourceMetricStatus)
 		(*in).DeepCopyInto(*out)
 	}
+	in.ScrapeTime.DeepCopyInto(&out.ScrapeTime)
 	return
 }
 
