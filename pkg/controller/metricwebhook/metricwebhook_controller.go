@@ -7,6 +7,7 @@ import (
 
 	metricsv1alpha1 "github.com/wingsofovnia/metrics-webhook/pkg/apis/metrics/v1alpha1"
 
+	"github.com/operator-framework/operator-sdk/pkg/predicate"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -76,7 +77,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource MetricWebhook
-	err = c.Watch(&source.Kind{Type: &metricsv1alpha1.MetricWebhook{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &metricsv1alpha1.MetricWebhook{}}, &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{})
 	if err != nil {
 		return err
 	}
@@ -132,8 +133,10 @@ func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile
 		)
 		return reconcile.Result{}, err
 	}
-	prevMetrics := metricWebhook.Status.Metrics
-	metricWebhook.Status.Metrics = currMetrics
+	prevMetrics := metricWebhook.Status.DeepCopy().Metrics
+	if currMetrics != nil {
+		metricWebhook.Status.Metrics = currMetrics
+	}
 
 	// Diff and group metric to improved and unimproved metrics
 	improvedMetrics, alertingMetrics := r.findImprovedAndAlertingMetrics(prevMetrics, currMetrics)
@@ -311,7 +314,7 @@ func (r *ReconcileMetricWebhook) createMetricReport(alertingMetrics, improvedMet
 		report = append(report, createMetricNotification(metricsv1alpha1.Alert, metric))
 	}
 	for _, metric := range improvedMetrics {
-		report = append(report, createMetricNotification(metricsv1alpha1.Alert, metric))
+		report = append(report, createMetricNotification(metricsv1alpha1.Cooldown, metric))
 	}
 
 	return report
@@ -390,7 +393,7 @@ func createMetricNotification(typ metricsv1alpha1.MetricNotificationType, metric
 		}
 	case metricsv1alpha1.ResourceMetricSourceType:
 		return metricsv1alpha1.MetricNotification{
-			Type: metricsv1alpha1.Alert,
+			Type: typ,
 
 			MetricType: metric.Type,
 			Name:       metric.Resource.Name.String(),
