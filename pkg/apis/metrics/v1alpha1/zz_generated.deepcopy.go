@@ -192,6 +192,7 @@ func (in *PodsMetricSource) DeepCopy() *PodsMetricSource {
 func (in *PodsMetricStatus) DeepCopyInto(out *PodsMetricStatus) {
 	*out = *in
 	out.CurrentAverageValue = in.CurrentAverageValue.DeepCopy()
+	out.TargetAverageValue = in.TargetAverageValue.DeepCopy()
 	return
 }
 
@@ -239,7 +240,17 @@ func (in *ResourceMetricStatus) DeepCopyInto(out *ResourceMetricStatus) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.TargetAverageUtilization != nil {
+		in, out := &in.TargetAverageUtilization, &out.TargetAverageUtilization
+		*out = new(int32)
+		**out = **in
+	}
 	out.CurrentAverageValue = in.CurrentAverageValue.DeepCopy()
+	if in.TargetAverageValue != nil {
+		in, out := &in.TargetAverageValue, &out.TargetAverageValue
+		x := (*in).DeepCopy()
+		*out = &x
+	}
 	return
 }
 

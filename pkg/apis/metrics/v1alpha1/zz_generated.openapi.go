@@ -73,6 +73,13 @@ func schema_pkg_apis_metrics_v1alpha1_MetricStatus(ref common.ReferenceCallback)
 							Format:      "",
 						},
 					},
+					"alerting": {
+						SchemaProps: spec.SchemaProps{
+							Description: "alerting flags the metrics those values exceed defined thresholds",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 					"pods": {
 						SchemaProps: spec.SchemaProps{
 							Description: "pods refers to a metric describing each pod matching the selector (for example, transactions-processed-per-second). The values will be averaged together before being compared to the target value.",
@@ -92,7 +99,7 @@ func schema_pkg_apis_metrics_v1alpha1_MetricStatus(ref common.ReferenceCallback)
 						},
 					},
 				},
-				Required: []string{"type", "scrapeTime"},
+				Required: []string{"type", "alerting", "scrapeTime"},
 			},
 		},
 		Dependencies: []string{
@@ -278,8 +285,14 @@ func schema_pkg_apis_metrics_v1alpha1_PodsMetricStatus(ref common.ReferenceCallb
 							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
 						},
 					},
+					"targetAverageValue": {
+						SchemaProps: spec.SchemaProps{
+							Description: "targetAverageValue is the target value of the average of the metric across all relevant pods (as a quantity) defined for this metric in specs",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
 				},
-				Required: []string{"name", "currentAverageValue"},
+				Required: []string{"name", "currentAverageValue", "targetAverageValue"},
 			},
 		},
 		Dependencies: []string{
@@ -344,9 +357,22 @@ func schema_pkg_apis_metrics_v1alpha1_ResourceMetricStatus(ref common.ReferenceC
 							Format:      "int32",
 						},
 					},
+					"targetAverageUtilization": {
+						SchemaProps: spec.SchemaProps{
+							Description: "targetAverageUtilization is the target value of the average of the resource metric across all relevant pods defined for this metric in specs",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
 					"currentAverageValue": {
 						SchemaProps: spec.SchemaProps{
 							Description: "currentAverageValue is the current value of the average of the resource metric across all relevant pods, as a raw value (instead of as a percentage of the request), similar to the \"pods\" metric source type. It will always be set, regardless of the corresponding metric specification.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"targetAverageValue": {
+						SchemaProps: spec.SchemaProps{
+							Description: "targetAverageValue is the target value of the average of the metric across all relevant pods (as a quantity) defined for this metric in specs",
 							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
 						},
 					},

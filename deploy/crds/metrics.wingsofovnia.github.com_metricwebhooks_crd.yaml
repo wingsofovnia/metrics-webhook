@@ -172,6 +172,10 @@ spec:
                 description: MetricStatus describes the last-read state of a single
                   metric.
                 properties:
+                  alerting:
+                    description: alerting flags the metrics those values exceed defined
+                      thresholds
+                    type: boolean
                   pods:
                     description: pods refers to a metric describing each pod matching
                       the selector (for example, transactions-processed-per-second).
@@ -185,9 +189,15 @@ spec:
                       name:
                         description: name is the name of the metric in question
                         type: string
+                      targetAverageValue:
+                        description: targetAverageValue is the target value of the
+                          average of the metric across all relevant pods (as a quantity)
+                          defined for this metric in specs
+                        type: string
                     required:
                     - currentAverageValue
                     - name
+                    - targetAverageValue
                     type: object
                   resource:
                     description: resource refers to a resource metric (such as those
@@ -216,6 +226,17 @@ spec:
                       name:
                         description: name is the name of the resource in question.
                         type: string
+                      targetAverageUtilization:
+                        description: targetAverageUtilization is the target value
+                          of the average of the resource metric across all relevant
+                          pods defined for this metric in specs
+                        format: int32
+                        type: integer
+                      targetAverageValue:
+                        description: targetAverageValue is the target value of the
+                          average of the metric across all relevant pods (as a quantity)
+                          defined for this metric in specs
+                        type: string
                     required:
                     - currentAverageValue
                     - name
@@ -234,6 +255,7 @@ spec:
                     - Resource
                     type: string
                 required:
+                - alerting
                 - scrapeTime
                 - type
                 type: object

@@ -121,6 +121,8 @@ type MetricStatus struct {
 	// type is the type of metric source.  It should be "Pods" or "Resource",
 	// each mapping to a matching field in the object.
 	Type MetricSourceType `json:"type"`
+	// alerting flags the metrics those values exceed defined thresholds
+	Alerting bool `json:"alerting"`
 	// pods refers to a metric describing each pod matching the selector
 	// (for example, transactions-processed-per-second). The values will be
 	// averaged together before being compared to the target value.
@@ -146,6 +148,9 @@ type PodsMetricStatus struct {
 	// currentAverageValue is the current value of the average of the
 	// metric across all relevant pods (as a quantity)
 	CurrentAverageValue resource.Quantity `json:"currentAverageValue"`
+	// targetAverageValue is the target value of the average of the
+	// metric across all relevant pods (as a quantity) defined for this metric in specs
+	TargetAverageValue resource.Quantity `json:"targetAverageValue"`
 }
 
 // ResourceMetricStatus indicates the current value of a resource metric known to
@@ -164,11 +169,18 @@ type ResourceMetricStatus struct {
 	// specification.
 	// +optional
 	CurrentAverageUtilization *int32 `json:"currentAverageUtilization,omitempty"`
+	// targetAverageUtilization is the target value of the average of the
+	// resource metric across all relevant pods defined for this metric in specs
+	// +optional
+	TargetAverageUtilization *int32 `json:"targetAverageUtilization,omitempty"`
 	// currentAverageValue is the current value of the average of the
 	// resource metric across all relevant pods, as a raw value (instead of as
 	// a percentage of the request), similar to the "pods" metric source type.
 	// It will always be set, regardless of the corresponding metric specification.
 	CurrentAverageValue resource.Quantity `json:"currentAverageValue"`
+	// targetAverageValue is the target value of the average of the
+	// metric across all relevant pods (as a quantity) defined for this metric in specs
+	TargetAverageValue *resource.Quantity `json:"targetAverageValue,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

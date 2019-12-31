@@ -125,7 +125,7 @@ func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile
 	metricWebhook.Status.Metrics = metricStatuses
 
 	// Check if any current metric values violate target thresholds and notify webhook
-	alerts := r.findMetricAlerts(metricWebhook.Spec.Metrics, metricWebhook.Status.Metrics)
+	alerts := r.findMetricAlerts(metricWebhook.Status.Metrics)
 	if len(alerts) > 0 {
 		webhookUrl, err := r.getWebhookUrl(metricWebhook.Namespace, metricWebhook.Spec.Webhook)
 		if err != nil {
@@ -164,129 +164,117 @@ func (r *ReconcileMetricWebhook) fetchCurrentMetrics(metricSpecs []metricsv1alph
 	return metricStatuses, nil
 }
 
-func (r *ReconcileMetricWebhook) fetchCurrentMetric(metricSpec metricsv1alpha1.MetricSpec, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.MetricStatus, error) {
-	switch metricSpec.Type {
+func (r *ReconcileMetricWebhook) fetchCurrentMetric(spec metricsv1alpha1.MetricSpec, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.MetricStatus, error) {
+	switch spec.Type {
 	case metricsv1alpha1.PodsMetricSourceType:
-		metricSource := metricSpec.Pods
-		averageValue, err := r.metricsClient.GetCurrentPodAverageValue(metricSource.Name, namespace, labelSelector, metricSource.TargetAverageValue)
+		currPodMetric, exceedsThreshold, err := r.fetchCurrentPodMetric(spec.Pods, namespace, labelSelector)
 		if err != nil {
 			return metricsv1alpha1.MetricStatus{}, err
 		}
-
 		return metricsv1alpha1.MetricStatus{
-			Type: metricsv1alpha1.PodsMetricSourceType,
-			Pods: &metricsv1alpha1.PodsMetricStatus{
-				Name:                metricSource.Name,
-				CurrentAverageValue: averageValue,
-			},
+			Type:       metricsv1alpha1.PodsMetricSourceType,
+			Alerting:   exceedsThreshold,
+			Pods:       &currPodMetric,
 			ScrapeTime: metav1.Now(),
 		}, nil
 	case metricsv1alpha1.ResourceMetricSourceType:
-		metricSource := metricSpec.Resource
-		if metricSource.TargetAverageValue != nil {
-			averageValue, err := r.metricsClient.GetCurrentResourceAverageValue(metricSource.Name, namespace, labelSelector, *metricSource.TargetAverageValue)
-			if err != nil {
-				return metricsv1alpha1.MetricStatus{}, err
-			}
-
-			return metricsv1alpha1.MetricStatus{
-				Type: metricsv1alpha1.ResourceMetricSourceType,
-				Resource: &metricsv1alpha1.ResourceMetricStatus{
-					Name:                metricSource.Name,
-					CurrentAverageValue: averageValue,
-				},
-				ScrapeTime: metav1.Now(),
-			}, nil
-		} else {
-			if metricSource.TargetAverageUtilization == nil {
-				return metricsv1alpha1.MetricStatus{}, fmt.Errorf("invalid resource metric source: neither a utilization target nor a value target set")
-			}
-
-			averageUtilization, averageValue, err := r.metricsClient.GetCurrentResourceAverageUtilization(metricSource.Name, namespace, labelSelector, *metricSource.TargetAverageUtilization)
-			if err != nil {
-				return metricsv1alpha1.MetricStatus{}, err
-			}
-
-			return metricsv1alpha1.MetricStatus{
-				Type: metricsv1alpha1.ResourceMetricSourceType,
-				Resource: &metricsv1alpha1.ResourceMetricStatus{
-					Name:                      metricSource.Name,
-					CurrentAverageValue:       averageValue,
-					CurrentAverageUtilization: &averageUtilization,
-				},
-				ScrapeTime: metav1.Now(),
-			}, nil
+		currResourceMetric, exceedsThreshold, err := r.fetchCurrentResourceMetric(spec.Resource, namespace, labelSelector)
+		if err != nil {
+			return metricsv1alpha1.MetricStatus{}, err
 		}
+		return metricsv1alpha1.MetricStatus{
+			Type:       metricsv1alpha1.ResourceMetricSourceType,
+			Alerting:   exceedsThreshold,
+			Resource:   &currResourceMetric,
+			ScrapeTime: metav1.Now(),
+		}, nil
 	default:
-		return metricsv1alpha1.MetricStatus{}, fmt.Errorf("invalid metric source type %s", metricSpec.Type)
+		return metricsv1alpha1.MetricStatus{}, fmt.Errorf("invalid metric source type %s", spec.Type)
 	}
 }
 
-func (r *ReconcileMetricWebhook) findMetricAlerts(specs []metricsv1alpha1.MetricSpec, statuses []metricsv1alpha1.MetricStatus) []metricsv1alpha1.MetricAlert {
-	if len(statuses) == 0 {
-		return []metricsv1alpha1.MetricAlert{}
+func (r *ReconcileMetricWebhook) fetchCurrentPodMetric(spec *metricsv1alpha1.PodsMetricSource, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.PodsMetricStatus, bool, error) {
+	averageValue, err := r.metricsClient.GetCurrentPodAverageValue(spec.Name, namespace, labelSelector, spec.TargetAverageValue)
+	if err != nil {
+		return metricsv1alpha1.PodsMetricStatus{}, false, err
 	}
 
-	// Group specs by name for faster access
-	podsMetricSources := make(map[string]*metricsv1alpha1.PodsMetricSource)
-	resourceMetricSource := make(map[v1.ResourceName]*metricsv1alpha1.ResourceMetricSource)
-	for _, spec := range specs {
-		switch spec.Type {
-		case metricsv1alpha1.PodsMetricSourceType:
-			podsMetricSources[spec.Pods.Name] = spec.Pods
-		case metricsv1alpha1.ResourceMetricSourceType:
-			resourceMetricSource[spec.Resource.Name] = spec.Resource
+	exceedsThreshold := averageValue.Cmp(spec.TargetAverageValue) > 0
+	return metricsv1alpha1.PodsMetricStatus{
+		Name:                spec.Name,
+		CurrentAverageValue: averageValue,
+		TargetAverageValue:  spec.TargetAverageValue,
+	}, exceedsThreshold, nil
+}
+
+func (r *ReconcileMetricWebhook) fetchCurrentResourceMetric(spec *metricsv1alpha1.ResourceMetricSource, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.ResourceMetricStatus, bool, error) {
+	if spec.TargetAverageValue != nil {
+		averageValue, err := r.metricsClient.GetCurrentResourceAverageValue(spec.Name, namespace, labelSelector, *spec.TargetAverageValue)
+		if err != nil {
+			return metricsv1alpha1.ResourceMetricStatus{}, false, err
 		}
+
+		exceedsThreshold := averageValue.Cmp(*spec.TargetAverageValue) > 0
+		return metricsv1alpha1.ResourceMetricStatus{
+			Name:                spec.Name,
+			CurrentAverageValue: averageValue,
+			TargetAverageValue:  spec.TargetAverageValue,
+		}, exceedsThreshold, nil
+	} else {
+		if spec.TargetAverageUtilization == nil {
+			return metricsv1alpha1.ResourceMetricStatus{}, false, fmt.Errorf("invalid resource metric source: neither a utilization target nor a value target set")
+		}
+
+		averageUtilization, averageValue, err := r.metricsClient.GetCurrentResourceAverageUtilization(spec.Name, namespace, labelSelector, *spec.TargetAverageUtilization)
+		if err != nil {
+			return metricsv1alpha1.ResourceMetricStatus{}, false, err
+		}
+
+		exceedsThreshold := averageUtilization > *spec.TargetAverageUtilization
+		return metricsv1alpha1.ResourceMetricStatus{
+			Name:                      spec.Name,
+			CurrentAverageUtilization: &averageUtilization,
+			TargetAverageUtilization:  spec.TargetAverageUtilization,
+			CurrentAverageValue:       averageValue,
+		}, exceedsThreshold, nil
+	}
+}
+
+func (r *ReconcileMetricWebhook) findMetricAlerts(metrics []metricsv1alpha1.MetricStatus) metricsv1alpha1.MetricReport {
+	if len(metrics) == 0 {
+		return metricsv1alpha1.MetricReport{}
 	}
 
 	// Create alerts
 	var alerts []metricsv1alpha1.MetricAlert
-	for _, status := range statuses {
+	for _, status := range metrics {
+		if status.Alerting {
+			continue
+		}
 		switch status.Type {
 		case metricsv1alpha1.PodsMetricSourceType:
-			metricName := status.Pods.Name
-			metricSource := podsMetricSources[metricName]
+			alerts = append(alerts, metricsv1alpha1.MetricAlert{
+				Type: status.Type,
+				Name: status.Pods.Name,
 
-			metricCurrentAverageValue := status.Pods.CurrentAverageValue
-			metricTargetAverageValue := metricSource.TargetAverageValue
+				CurrentAverageValue: status.Pods.CurrentAverageValue,
+				TargetAverageValue:  &status.Pods.TargetAverageValue,
 
-			if metricCurrentAverageValue.Cmp(metricTargetAverageValue) > 0 {
-				alerts = append(alerts, metricsv1alpha1.MetricAlert{
-					Type: status.Type,
-					Name: metricName,
-
-					CurrentAverageValue: metricCurrentAverageValue,
-					TargetAverageValue:  &metricTargetAverageValue,
-
-					ScrapeTime: status.ScrapeTime.Time,
-				})
-			}
+				ScrapeTime: status.ScrapeTime.Time,
+			})
 		case metricsv1alpha1.ResourceMetricSourceType:
-			metricName := status.Resource.Name
-			metricSource := resourceMetricSource[metricName]
+			alerts = append(alerts, metricsv1alpha1.MetricAlert{
+				Type: status.Type,
+				Name: status.Resource.Name.String(),
 
-			metricCurrentAverageValue := status.Resource.CurrentAverageValue
-			metricTargetAverageValue := metricSource.TargetAverageValue
+				CurrentAverageValue: status.Resource.CurrentAverageValue,
+				TargetAverageValue:  status.Resource.TargetAverageValue,
 
-			metricCurrentAverageUtilization := status.Resource.CurrentAverageUtilization
-			metricTargetAverageUtilization := metricSource.TargetAverageUtilization
+				CurrentAverageUtilization: status.Resource.CurrentAverageUtilization,
+				TargetAverageUtilization:  status.Resource.TargetAverageUtilization,
 
-			if (metricTargetAverageUtilization != nil && *metricCurrentAverageUtilization > *metricTargetAverageUtilization) ||
-				(metricTargetAverageValue != nil && metricCurrentAverageValue.Cmp(*metricSource.TargetAverageValue) > 0) {
-
-				alerts = append(alerts, metricsv1alpha1.MetricAlert{
-					Type: status.Type,
-					Name: metricName.String(),
-
-					CurrentAverageValue: metricCurrentAverageValue,
-					TargetAverageValue:  metricTargetAverageValue,
-
-					CurrentAverageUtilization: metricCurrentAverageUtilization,
-					TargetAverageUtilization:  metricTargetAverageUtilization,
-
-					ScrapeTime: status.ScrapeTime.Time,
-				})
-			}
+				ScrapeTime: status.ScrapeTime.Time,
+			})
 		}
 	}
 
