@@ -246,11 +246,10 @@ func (n *MetricNotification) String() string {
 
 	tokens = append(tokens, fmt.Sprintf("name = %s", n.Name))
 	if n.TargetAverageUtilization != nil {
-		tokens = append(tokens, fmt.Sprintf("avg utilization = %d%%/%d%%", n.CurrentAverageUtilization, n.TargetAverageUtilization))
+		tokens = append(tokens, fmt.Sprintf("avg utilization = %d%%/%d%%", *n.CurrentAverageUtilization, *n.TargetAverageUtilization))
 	} else {
 		tokens = append(tokens, fmt.Sprintf("avg value = %s/%s", n.CurrentAverageValue.String(), n.TargetAverageValue.String()))
 	}
-	tokens = append(tokens, fmt.Sprintf("scrape time = %s", n.ScrapeTime.String()))
 
 	return string(n.Type) + "[" + strings.Join(tokens, ", ") + "]"
 }

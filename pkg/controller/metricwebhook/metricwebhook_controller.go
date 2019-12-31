@@ -136,7 +136,7 @@ func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile
 	metricWebhook.Status.Metrics = currMetrics
 
 	// Diff and group metric to improved and unimproved metrics
-	_, improvedMetrics, alertingMetrics := r.diffMetrics(prevMetrics, currMetrics)
+	improvedMetrics, alertingMetrics := r.findImprovedAndAlertingMetrics(prevMetrics, currMetrics)
 
 	// Compile metric report to (not/)include cooldown notifications
 	var metricReport metricsv1alpha1.MetricReport
@@ -169,8 +169,6 @@ func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile
 				"Error", err,
 			)
 			// Stay resilient, proceed normally
-		} else {
-			r.eventRecorder.Eventf(metricWebhook, v1.EventTypeNormal, "SucceededReport", "The webhook (url = %s) was successfully notified with a report of all %d notifications", webhookUrl, len(metricReport))
 		}
 	}
 
@@ -268,7 +266,7 @@ func (r *ReconcileMetricWebhook) fetchCurrentResourceMetric(spec *metricsv1alpha
 	}
 }
 
-func (r *ReconcileMetricWebhook) diffMetrics(orig []metricsv1alpha1.MetricStatus, upd []metricsv1alpha1.MetricStatus) (unimprovedMetrics []metricsv1alpha1.MetricStatus, improvedMetrics []metricsv1alpha1.MetricStatus, alertingMetrics []metricsv1alpha1.MetricStatus) {
+func (r *ReconcileMetricWebhook) findImprovedAndAlertingMetrics(orig []metricsv1alpha1.MetricStatus, upd []metricsv1alpha1.MetricStatus) (improvedMetrics []metricsv1alpha1.MetricStatus, alertingMetrics []metricsv1alpha1.MetricStatus) {
 	// Group Orig(in) metrics by name
 	metricNameToOrigin := make(map[string]metricsv1alpha1.MetricStatus)
 	for _, metric := range orig {
@@ -285,9 +283,9 @@ func (r *ReconcileMetricWebhook) diffMetrics(orig []metricsv1alpha1.MetricStatus
 	for _, metric := range upd {
 		switch metric.Type {
 		case metricsv1alpha1.PodsMetricSourceType:
-			metricNameToOrigin[metric.Pods.Name] = metric
+			metricNameToUpdated[metric.Pods.Name] = metric
 		case metricsv1alpha1.ResourceMetricSourceType:
-			metricNameToOrigin[metric.Resource.Name.String()] = metric
+			metricNameToUpdated[metric.Resource.Name.String()] = metric
 		}
 	}
 
@@ -296,10 +294,8 @@ func (r *ReconcileMetricWebhook) diffMetrics(orig []metricsv1alpha1.MetricStatus
 
 		if origMetric.Alerting && !updMetric.Alerting {
 			improvedMetrics = append(improvedMetrics, updMetric)
-		} else if !origMetric.Alerting && updMetric.Alerting {
+		} else if updMetric.Alerting {
 			alertingMetrics = append(alertingMetrics, updMetric)
-		} else {
-			unimprovedMetrics = append(unimprovedMetrics, updMetric)
 		}
 	}
 
@@ -309,7 +305,7 @@ func (r *ReconcileMetricWebhook) diffMetrics(orig []metricsv1alpha1.MetricStatus
 func (r *ReconcileMetricWebhook) createMetricReport(alertingMetrics, improvedMetrics []metricsv1alpha1.MetricStatus) metricsv1alpha1.MetricReport {
 	var report metricsv1alpha1.MetricReport
 	for _, metric := range alertingMetrics {
-		if metric.Alerting {
+		if !metric.Alerting {
 			continue
 		}
 		report = append(report, createMetricNotification(metricsv1alpha1.Alert, metric))
@@ -370,11 +366,11 @@ func (r *ReconcileMetricWebhook) postMetricReportEvents(o runtime.Object, report
 
 	if len(alertingMetrics) > 0 {
 		alertingMetricsStatus := strings.Join(alertingMetrics, ", ")
-		r.eventRecorder.Eventf(o, v1.EventTypeNormal, "NewAlerts", "New alerting notifications: %s", alertingMetricsStatus)
+		r.eventRecorder.Event(o, v1.EventTypeNormal, "NewAlerts", alertingMetricsStatus)
 	}
 	if len(cooldownMetric) > 0 {
 		cooldownMetricStatus := strings.Join(cooldownMetric, ", ")
-		r.eventRecorder.Eventf(o, v1.EventTypeNormal, "NewCooldowns", "New cooldown notifications: %s", cooldownMetricStatus)
+		r.eventRecorder.Event(o, v1.EventTypeNormal, "NewCooldowns", cooldownMetricStatus)
 	}
 }
 
