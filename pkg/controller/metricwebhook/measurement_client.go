@@ -11,16 +11,16 @@ import (
 	metricsclient "k8s.io/kubernetes/pkg/controller/podautoscaler/metrics"
 )
 
-type MetricValuesClient struct {
+type MetricMeasurementClient struct {
 	metricsClient metricsclient.MetricsClient
 	k8sClient     *k8s.Clientset
 }
 
-func NewMetricValuesClient(metricsClient metricsclient.MetricsClient, k8sClient *k8s.Clientset) *MetricValuesClient {
-	return &MetricValuesClient{metricsClient: metricsClient, k8sClient: k8sClient}
+func NewMetricValuesClient(metricsClient metricsclient.MetricsClient, k8sClient *k8s.Clientset) *MetricMeasurementClient {
+	return &MetricMeasurementClient{metricsClient: metricsClient, k8sClient: k8sClient}
 }
 
-func (f *MetricValuesClient) GetCurrentPodAverageValue(name string, namespace string, labelSelector metav1.LabelSelector, targetAverageValue resource.Quantity) (averageValue resource.Quantity, err error) {
+func (f *MetricMeasurementClient) GetCurrentPodAverageValue(name string, namespace string, labelSelector metav1.LabelSelector, targetAverageValue resource.Quantity) (averageValue resource.Quantity, err error) {
 	podSelector, err := metav1.LabelSelectorAsSelector(&labelSelector)
 	if err != nil {
 		return resource.Quantity{}, err
@@ -34,7 +34,7 @@ func (f *MetricValuesClient) GetCurrentPodAverageValue(name string, namespace st
 	return *resource.NewMilliQuantity(currentUtilization, resource.DecimalSI), nil
 }
 
-func (f *MetricValuesClient) GetCurrentResourceAverageValue(name v1.ResourceName, namespace string, labelSelector metav1.LabelSelector, targetAverageValue resource.Quantity) (averageValue resource.Quantity, err error) {
+func (f *MetricMeasurementClient) GetCurrentResourceAverageValue(name v1.ResourceName, namespace string, labelSelector metav1.LabelSelector, targetAverageValue resource.Quantity) (averageValue resource.Quantity, err error) {
 	podSelector, err := metav1.LabelSelectorAsSelector(&labelSelector)
 	if err != nil {
 		return resource.Quantity{}, err
@@ -48,7 +48,7 @@ func (f *MetricValuesClient) GetCurrentResourceAverageValue(name v1.ResourceName
 	return *resource.NewMilliQuantity(currentUtilization, resource.DecimalSI), nil
 }
 
-func (f *MetricValuesClient) GetCurrentResourceAverageUtilization(name v1.ResourceName, namespace string, labelSelector metav1.LabelSelector, targetAverageUtilization int32) (averageUtilization int32, averageValue resource.Quantity, err error) {
+func (f *MetricMeasurementClient) GetCurrentResourceAverageUtilization(name v1.ResourceName, namespace string, labelSelector metav1.LabelSelector, targetAverageUtilization int32) (averageUtilization int32, averageValue resource.Quantity, err error) {
 	podSelector, err := metav1.LabelSelectorAsSelector(&labelSelector)
 	if err != nil {
 		return 0, resource.Quantity{}, err

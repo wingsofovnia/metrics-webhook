@@ -3,11 +3,10 @@ package metricwebhook
 import (
 	"context"
 	"fmt"
-	"strings"
+	"github.com/go-logr/logr"
 
 	metricsv1alpha1 "github.com/wingsofovnia/metrics-webhook/pkg/apis/metrics/v1alpha1"
 
-	"github.com/operator-framework/operator-sdk/pkg/predicate"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,91 +19,52 @@ import (
 	"k8s.io/metrics/pkg/client/custom_metrics"
 	"k8s.io/metrics/pkg/client/external_metrics"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
+	"strings"
 )
 
-const controllerName = "metricwebhook-controller"
+const ReconcilerName = "metricwebhook-reconciler"
 
-var log = logf.Log.WithName(controllerName)
-
-// Add creates a new MetricWebhook Controller and adds it to the Manager. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	reconciler, err := newReconciler(mgr)
-	if err != nil {
-		return err
-	}
-	return add(mgr, reconciler)
+type MetricWebhookReconciler struct {
+	client                   client.Client
+	scheme                   *runtime.Scheme
+	metricsClient            *MetricMeasurementClient
+	metricNotificationClient *MetricNotificationClient
+	eventRecorder            record.EventRecorder
+	logger                   logr.Logger
 }
 
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
-	clientConfig := mgr.GetConfig()
+func NewReconcileMetricWebhook(mgr manager.Manager) (reconcile.Reconciler, error) {
 	restMapper := mgr.GetRESTMapper()
-	clientSet, err := kubernetes.NewForConfig(clientConfig)
+	clientSet, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
-		return &ReconcileMetricWebhook{}, err
+		return &MetricWebhookReconciler{}, err
 	}
 
 	apisGetter := custom_metrics.NewAvailableAPIsGetter(clientSet.Discovery())
 	metricsClient := metrics.NewRESTMetricsClient(
-		metricsclientv1beta1.NewForConfigOrDie(clientConfig),
-		custom_metrics.NewForConfig(clientConfig, restMapper, apisGetter),
-		external_metrics.NewForConfigOrDie(clientConfig),
+		metricsclientv1beta1.NewForConfigOrDie(mgr.GetConfig()),
+		custom_metrics.NewForConfig(mgr.GetConfig(), restMapper, apisGetter),
+		external_metrics.NewForConfigOrDie(mgr.GetConfig()),
 	)
-	metricValuesClient := NewMetricValuesClient(metricsClient, clientSet)
 
-	return &ReconcileMetricWebhook{
+	return &MetricWebhookReconciler{
 		client:                   mgr.GetClient(),
 		scheme:                   mgr.GetScheme(),
-		metricsClient:            metricValuesClient,
+		metricsClient:            NewMetricValuesClient(metricsClient, clientSet),
 		metricNotificationClient: NewDefaultMetricAlertClient(),
-		eventRecorder:            mgr.GetEventRecorderFor(controllerName),
+		eventRecorder:            mgr.GetEventRecorderFor(ControllerName),
+		logger:                   logf.Log.WithName(ReconcilerName),
 	}, nil
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to primary resource MetricWebhook
-	err = c.Watch(&source.Kind{Type: &metricsv1alpha1.MetricWebhook{}}, &handler.EnqueueRequestForObject{}, predicate.GenerationChangedPredicate{})
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// blank assignment to verify that ReconcileMetricWebhook implements reconcile.Reconciler
-var _ reconcile.Reconciler = &ReconcileMetricWebhook{}
-
-// ReconcileMetricWebhook reconciles a MetricWebhook object
-type ReconcileMetricWebhook struct {
-	client                   client.Client
-	scheme                   *runtime.Scheme
-	metricsClient            *MetricValuesClient
-	metricNotificationClient *MetricNotificationClient
-	eventRecorder            record.EventRecorder
-}
-
-// Reconcile reads that state of the cluster for a MetricWebhook object and makes changes based on the state read
-// and what is in the MetricWebhook.Spec
-// Note:
-// The Controller will requeue the Request to be processed again if the returned error is non-nil or
-// Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling MetricWebhook")
+// Reconcile reads that state of the cluster for a MetricWebhook object and
+// sends out metric notification based on the config defined in MetricWebhook.Spec
+// and current metric measurements
+func (r *MetricWebhookReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	reqLogger := r.logger.WithValues("Resource", request.NamespacedName)
 
 	// Fetch the MetricWebhook instance
 	metricWebhook := &metricsv1alpha1.MetricWebhook{}
@@ -181,7 +141,7 @@ func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile
 	}, nil
 }
 
-func (r *ReconcileMetricWebhook) fetchCurrentMetrics(metricSpecs []metricsv1alpha1.MetricSpec, namespace string, labelSelector metav1.LabelSelector) ([]metricsv1alpha1.MetricStatus, error) {
+func (r *MetricWebhookReconciler) fetchCurrentMetrics(metricSpecs []metricsv1alpha1.MetricSpec, namespace string, labelSelector metav1.LabelSelector) ([]metricsv1alpha1.MetricStatus, error) {
 	var metricStatuses []metricsv1alpha1.MetricStatus
 	for _, metricSpec := range metricSpecs {
 		metricStatus, err := r.fetchCurrentMetric(metricSpec, namespace, labelSelector)
@@ -193,7 +153,7 @@ func (r *ReconcileMetricWebhook) fetchCurrentMetrics(metricSpecs []metricsv1alph
 	return metricStatuses, nil
 }
 
-func (r *ReconcileMetricWebhook) fetchCurrentMetric(spec metricsv1alpha1.MetricSpec, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.MetricStatus, error) {
+func (r *MetricWebhookReconciler) fetchCurrentMetric(spec metricsv1alpha1.MetricSpec, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.MetricStatus, error) {
 	switch spec.Type {
 	case metricsv1alpha1.PodsMetricSourceType:
 		currPodMetric, exceedsThreshold, err := r.fetchCurrentPodMetric(spec.Pods, namespace, labelSelector)
@@ -222,7 +182,7 @@ func (r *ReconcileMetricWebhook) fetchCurrentMetric(spec metricsv1alpha1.MetricS
 	}
 }
 
-func (r *ReconcileMetricWebhook) fetchCurrentPodMetric(spec *metricsv1alpha1.PodsMetricSource, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.PodsMetricStatus, bool, error) {
+func (r *MetricWebhookReconciler) fetchCurrentPodMetric(spec *metricsv1alpha1.PodsMetricSource, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.PodsMetricStatus, bool, error) {
 	averageValue, err := r.metricsClient.GetCurrentPodAverageValue(spec.Name, namespace, labelSelector, spec.TargetAverageValue)
 	if err != nil {
 		return metricsv1alpha1.PodsMetricStatus{}, false, err
@@ -236,7 +196,7 @@ func (r *ReconcileMetricWebhook) fetchCurrentPodMetric(spec *metricsv1alpha1.Pod
 	}, exceedsThreshold, nil
 }
 
-func (r *ReconcileMetricWebhook) fetchCurrentResourceMetric(spec *metricsv1alpha1.ResourceMetricSource, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.ResourceMetricStatus, bool, error) {
+func (r *MetricWebhookReconciler) fetchCurrentResourceMetric(spec *metricsv1alpha1.ResourceMetricSource, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.ResourceMetricStatus, bool, error) {
 	if spec.TargetAverageValue != nil {
 		averageValue, err := r.metricsClient.GetCurrentResourceAverageValue(spec.Name, namespace, labelSelector, *spec.TargetAverageValue)
 		if err != nil {
@@ -269,7 +229,7 @@ func (r *ReconcileMetricWebhook) fetchCurrentResourceMetric(spec *metricsv1alpha
 	}
 }
 
-func (r *ReconcileMetricWebhook) findImprovedAndAlertingMetrics(orig []metricsv1alpha1.MetricStatus, upd []metricsv1alpha1.MetricStatus) (improvedMetrics []metricsv1alpha1.MetricStatus, alertingMetrics []metricsv1alpha1.MetricStatus) {
+func (r *MetricWebhookReconciler) findImprovedAndAlertingMetrics(orig []metricsv1alpha1.MetricStatus, upd []metricsv1alpha1.MetricStatus) (improvedMetrics []metricsv1alpha1.MetricStatus, alertingMetrics []metricsv1alpha1.MetricStatus) {
 	// Group Orig(in) metrics by name
 	metricNameToOrigin := make(map[string]metricsv1alpha1.MetricStatus)
 	for _, metric := range orig {
@@ -305,7 +265,7 @@ func (r *ReconcileMetricWebhook) findImprovedAndAlertingMetrics(orig []metricsv1
 	return
 }
 
-func (r *ReconcileMetricWebhook) createMetricReport(alertingMetrics, improvedMetrics []metricsv1alpha1.MetricStatus) metricsv1alpha1.MetricReport {
+func (r *MetricWebhookReconciler) createMetricReport(alertingMetrics, improvedMetrics []metricsv1alpha1.MetricStatus) metricsv1alpha1.MetricReport {
 	var report metricsv1alpha1.MetricReport
 	for _, metric := range alertingMetrics {
 		if !metric.Alerting {
@@ -320,7 +280,7 @@ func (r *ReconcileMetricWebhook) createMetricReport(alertingMetrics, improvedMet
 	return report
 }
 
-func (r *ReconcileMetricWebhook) compileWebhookUrl(namespace string, webhookSpec metricsv1alpha1.Webhook) (string, error) {
+func (r *MetricWebhookReconciler) compileWebhookUrl(namespace string, webhookSpec metricsv1alpha1.Webhook) (string, error) {
 	if specWebhookUrl := webhookSpec.Url; specWebhookUrl != "" {
 		return specWebhookUrl, nil
 	}
@@ -355,7 +315,7 @@ func (r *ReconcileMetricWebhook) compileWebhookUrl(namespace string, webhookSpec
 	return webhookUrl, nil
 }
 
-func (r *ReconcileMetricWebhook) postMetricReportEvents(o runtime.Object, report metricsv1alpha1.MetricReport) {
+func (r *MetricWebhookReconciler) postMetricReportEvents(o runtime.Object, report metricsv1alpha1.MetricReport) {
 	var alertingMetrics []string
 	var cooldownMetric []string
 	for _, notification := range report {
