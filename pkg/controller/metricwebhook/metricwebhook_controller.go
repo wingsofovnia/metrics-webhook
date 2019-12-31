@@ -3,7 +3,9 @@ package metricwebhook
 import (
 	"context"
 	"fmt"
+
 	metricsv1alpha1 "github.com/wingsofovnia/metrics-webhook/pkg/apis/metrics/v1alpha1"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,10 +55,10 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	metricValuesClient := NewMetricValuesClient(metricsClient, clientSet)
 
 	return &ReconcileMetricWebhook{
-		client:            mgr.GetClient(),
-		scheme:            mgr.GetScheme(),
-		metricsClient:     metricValuesClient,
-		metricAlertClient: NewDefaultMetricAlertClient(),
+		client:                   mgr.GetClient(),
+		scheme:                   mgr.GetScheme(),
+		metricsClient:            metricValuesClient,
+		metricNotificationClient: NewDefaultMetricAlertClient(),
 	}, nil
 }
 
@@ -82,10 +84,10 @@ var _ reconcile.Reconciler = &ReconcileMetricWebhook{}
 
 // ReconcileMetricWebhook reconciles a MetricWebhook object
 type ReconcileMetricWebhook struct {
-	client            client.Client
-	scheme            *runtime.Scheme
-	metricsClient     *MetricValuesClient
-	metricAlertClient *MetricAlertClient
+	client                   client.Client
+	scheme                   *runtime.Scheme
+	metricsClient            *MetricValuesClient
+	metricNotificationClient *MetricNotificationClient
 }
 
 // Reconcile reads that state of the cluster for a MetricWebhook object and makes changes based on the state read
@@ -115,28 +117,39 @@ func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile
 	}()
 
 	// Fetch metric values and update MetricWebhook instance status
-	metricStatuses, err := r.fetchCurrentMetrics(metricWebhook.Spec.Metrics, metricWebhook.Namespace, metricWebhook.Spec.Selector)
+	currMetrics, err := r.fetchCurrentMetrics(metricWebhook.Spec.Metrics, metricWebhook.Namespace, metricWebhook.Spec.Selector)
 	if err != nil {
 		reqLogger.Error(err, "failed to fetch current metric values",
 			"Spec.Selector", metricWebhook.Spec.Selector,
 		)
 		return reconcile.Result{}, err
 	}
-	metricWebhook.Status.Metrics = metricStatuses
+	prevMetrics := metricWebhook.Status.Metrics
+	metricWebhook.Status.Metrics = currMetrics
 
-	// Check if any current metric values violate target thresholds and notify webhook
-	alerts := r.findMetricAlerts(metricWebhook.Status.Metrics)
-	if len(alerts) > 0 {
-		webhookUrl, err := r.getWebhookUrl(metricWebhook.Namespace, metricWebhook.Spec.Webhook)
+	// Diff and group metric to improved and unimproved metrics
+	_, improvedMetrics, alertingMetrics := r.diffMetrics(prevMetrics, currMetrics)
+
+	// Compile metric report to (not/)include cooldown notifications
+	var metricReport metricsv1alpha1.MetricReport
+	if metricWebhook.Spec.CooldownAlert {
+		metricReport = r.createMetricReport(alertingMetrics, improvedMetrics)
+	} else {
+		metricReport = r.createMetricReport(alertingMetrics, []metricsv1alpha1.MetricStatus{})
+	}
+
+	// Send out metric notifications
+	if len(metricReport) > 0 {
+		webhookUrl, err := r.compileWebhookUrl(metricWebhook.Namespace, metricWebhook.Spec.Webhook)
 		if err != nil {
 			reqLogger.Error(err, "failed to resolve webhook url")
 			return reconcile.Result{}, err
 		}
 		reqLogger.Info("notifying webhook",
 			"Spec.Webhook.Url(resolved)", webhookUrl,
-			"alerts", alerts,
+			"metricReport", metricReport,
 		)
-		err = r.metricAlertClient.notify(webhookUrl, alerts)
+		err = r.metricNotificationClient.notify(webhookUrl, metricReport)
 		if err != nil {
 			reqLogger.Info("failed to notify webhook",
 				"Spec.Webhook.Url(resolved)", webhookUrl,
@@ -240,48 +253,60 @@ func (r *ReconcileMetricWebhook) fetchCurrentResourceMetric(spec *metricsv1alpha
 	}
 }
 
-func (r *ReconcileMetricWebhook) findMetricAlerts(metrics []metricsv1alpha1.MetricStatus) metricsv1alpha1.MetricReport {
-	if len(metrics) == 0 {
-		return metricsv1alpha1.MetricReport{}
-	}
-
-	// Create alerts
-	var alerts []metricsv1alpha1.MetricAlert
-	for _, status := range metrics {
-		if status.Alerting {
-			continue
-		}
-		switch status.Type {
+func (r *ReconcileMetricWebhook) diffMetrics(orig []metricsv1alpha1.MetricStatus, upd []metricsv1alpha1.MetricStatus) (unimprovedMetrics []metricsv1alpha1.MetricStatus, improvedMetrics []metricsv1alpha1.MetricStatus, alertingMetrics []metricsv1alpha1.MetricStatus) {
+	// Group Orig(in) metrics by name
+	metricNameToOrigin := make(map[string]metricsv1alpha1.MetricStatus)
+	for _, metric := range orig {
+		switch metric.Type {
 		case metricsv1alpha1.PodsMetricSourceType:
-			alerts = append(alerts, metricsv1alpha1.MetricAlert{
-				Type: status.Type,
-				Name: status.Pods.Name,
-
-				CurrentAverageValue: status.Pods.CurrentAverageValue,
-				TargetAverageValue:  &status.Pods.TargetAverageValue,
-
-				ScrapeTime: status.ScrapeTime.Time,
-			})
+			metricNameToOrigin[metric.Pods.Name] = metric
 		case metricsv1alpha1.ResourceMetricSourceType:
-			alerts = append(alerts, metricsv1alpha1.MetricAlert{
-				Type: status.Type,
-				Name: status.Resource.Name.String(),
-
-				CurrentAverageValue: status.Resource.CurrentAverageValue,
-				TargetAverageValue:  status.Resource.TargetAverageValue,
-
-				CurrentAverageUtilization: status.Resource.CurrentAverageUtilization,
-				TargetAverageUtilization:  status.Resource.TargetAverageUtilization,
-
-				ScrapeTime: status.ScrapeTime.Time,
-			})
+			metricNameToOrigin[metric.Resource.Name.String()] = metric
 		}
 	}
 
-	return alerts
+	// Group Upd(ated) metrics by name
+	metricNameToUpdated := make(map[string]metricsv1alpha1.MetricStatus)
+	for _, metric := range upd {
+		switch metric.Type {
+		case metricsv1alpha1.PodsMetricSourceType:
+			metricNameToOrigin[metric.Pods.Name] = metric
+		case metricsv1alpha1.ResourceMetricSourceType:
+			metricNameToOrigin[metric.Resource.Name.String()] = metric
+		}
+	}
+
+	for name, origMetric := range metricNameToOrigin {
+		updMetric := metricNameToUpdated[name]
+
+		if origMetric.Alerting && !updMetric.Alerting {
+			improvedMetrics = append(improvedMetrics, updMetric)
+		} else if !origMetric.Alerting && updMetric.Alerting {
+			alertingMetrics = append(alertingMetrics, updMetric)
+		} else {
+			unimprovedMetrics = append(unimprovedMetrics, updMetric)
+		}
+	}
+
+	return
 }
 
-func (r *ReconcileMetricWebhook) getWebhookUrl(namespace string, webhookSpec metricsv1alpha1.Webhook) (string, error) {
+func (r *ReconcileMetricWebhook) createMetricReport(alertingMetrics, improvedMetrics []metricsv1alpha1.MetricStatus) metricsv1alpha1.MetricReport {
+	var report metricsv1alpha1.MetricReport
+	for _, metric := range alertingMetrics {
+		if metric.Alerting {
+			continue
+		}
+		report = append(report, createMetricNotification(metricsv1alpha1.Alert, metric))
+	}
+	for _, metric := range improvedMetrics {
+		report = append(report, createMetricNotification(metricsv1alpha1.Alert, metric))
+	}
+
+	return report
+}
+
+func (r *ReconcileMetricWebhook) compileWebhookUrl(namespace string, webhookSpec metricsv1alpha1.Webhook) (string, error) {
 	if specWebhookUrl := webhookSpec.Url; specWebhookUrl != "" {
 		return specWebhookUrl, nil
 	}
@@ -314,4 +339,37 @@ func (r *ReconcileMetricWebhook) getWebhookUrl(namespace string, webhookSpec met
 		webhookUrl = webhookUrl + webhookPath
 	}
 	return webhookUrl, nil
+}
+
+func createMetricNotification(typ metricsv1alpha1.MetricNotificationType, metric metricsv1alpha1.MetricStatus) metricsv1alpha1.MetricNotification {
+	switch metric.Type {
+	case metricsv1alpha1.PodsMetricSourceType:
+		return metricsv1alpha1.MetricNotification{
+			Type: typ,
+
+			MetricType: metric.Type,
+			Name:       metric.Pods.Name,
+
+			CurrentAverageValue: metric.Pods.CurrentAverageValue,
+			TargetAverageValue:  &metric.Pods.TargetAverageValue,
+
+			ScrapeTime: metric.ScrapeTime.Time,
+		}
+	case metricsv1alpha1.ResourceMetricSourceType:
+		return metricsv1alpha1.MetricNotification{
+			Type: metricsv1alpha1.Alert,
+
+			MetricType: metric.Type,
+			Name:       metric.Resource.Name.String(),
+
+			CurrentAverageValue: metric.Resource.CurrentAverageValue,
+			TargetAverageValue:  metric.Resource.TargetAverageValue,
+
+			CurrentAverageUtilization: metric.Resource.CurrentAverageUtilization,
+			TargetAverageUtilization:  metric.Resource.TargetAverageUtilization,
+
+			ScrapeTime: metric.ScrapeTime.Time,
+		}
+	}
+	return metricsv1alpha1.MetricNotification{}
 }

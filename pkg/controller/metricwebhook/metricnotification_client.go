@@ -13,21 +13,21 @@ import (
 
 const defaultHttpTimeout = time.Second * 3
 
-type MetricAlertClient struct {
+type MetricNotificationClient struct {
 	httpClient *http.Client
 }
 
-func NewDefaultMetricAlertClient() *MetricAlertClient {
+func NewDefaultMetricAlertClient() *MetricNotificationClient {
 	return NewMetricAlertClient(&http.Client{
 		Timeout: defaultHttpTimeout,
 	})
 }
 
-func NewMetricAlertClient(httpClient *http.Client) *MetricAlertClient {
-	return &MetricAlertClient{httpClient: httpClient}
+func NewMetricAlertClient(httpClient *http.Client) *MetricNotificationClient {
+	return &MetricNotificationClient{httpClient: httpClient}
 }
 
-func (c *MetricAlertClient) notify(webhookUrl string, report v1alpha1.MetricReport) error {
+func (c *MetricNotificationClient) notify(webhookUrl string, report v1alpha1.MetricReport) error {
 	reqBodyBytes, err := json.Marshal(report)
 	if err != nil {
 		return err

@@ -194,8 +194,15 @@ func schema_pkg_apis_metrics_v1alpha1_MetricWebhookSpec(ref common.ReferenceCall
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
 						},
 					},
+					"cooldownAlert": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Determines whether a metric alert sent one more time after values go under thresholds so that the client can track its adjustments improvements",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 				},
-				Required: []string{"selector", "webhook", "metrics", "scrapeInterval"},
+				Required: []string{"selector", "webhook", "metrics", "scrapeInterval", "cooldownAlert"},
 			},
 		},
 		Dependencies: []string{

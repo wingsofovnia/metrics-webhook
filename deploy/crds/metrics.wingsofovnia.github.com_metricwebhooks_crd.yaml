@@ -31,6 +31,11 @@ spec:
         spec:
           description: MetricWebhookSpec defines the desired state of MetricWebhook
           properties:
+            cooldownAlert:
+              description: Determines whether a metric alert sent one more time after
+                values go under thresholds so that the client can track its adjustments
+                improvements
+              type: boolean
             metrics:
               description: metrics contains the specifications for metrics thresholds
                 used to trigger webhook
@@ -157,6 +162,7 @@ spec:
                   type: string
               type: object
           required:
+          - cooldownAlert
           - metrics
           - scrapeInterval
           - selector

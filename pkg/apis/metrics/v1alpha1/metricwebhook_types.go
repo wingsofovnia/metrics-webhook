@@ -21,6 +21,9 @@ type MetricWebhookSpec struct {
 	Metrics []MetricSpec `json:"metrics"`
 	// scrapeInterval defines how frequently to scrape metrics
 	ScrapeInterval metav1.Duration `json:"scrapeInterval"`
+	// Determines whether a metric alert sent one more time after values go
+	// under thresholds so that the client can track its adjustments improvements
+	CooldownAlert bool `json:"cooldownAlert"`
 }
 
 // Webhook describes the web endpoint that the operator calls on metrics reaching their thresholds
@@ -209,20 +212,37 @@ type MetricWebhookList struct {
 // +k8s:deepcopy-gen=false
 // +k8s:openapi-gen=false
 // +kubebuilder:skipversion
-type MetricAlert struct {
-	Type                      MetricSourceType   `json:"type"`
-	Name                      string             `json:"name"`
-	CurrentAverageValue       resource.Quantity  `json:"currentAverageValue,omitempty"`
-	TargetAverageValue        *resource.Quantity `json:"targetAverageValue,omitempty"`
-	CurrentAverageUtilization *int32             `json:"currentAverageUtilization,omitempty"`
-	TargetAverageUtilization  *int32             `json:"targetAverageUtilization,omitempty"`
-	ScrapeTime                time.Time          `json:"scrapeTime"`
+type MetricNotificationType string
+
+const (
+	// Alert metric notification informs about a metric those
+	// values exceeded the ones set by its thresholds.
+	Alert MetricNotificationType = "ALERT"
+	// Cooldown metric notification informs about a metric that
+	// has improved to the extend of meeting thresholds set. This
+	// notification may be used by the target application in order
+	// to correlate internal adjustments with metric values improvements.
+	Cooldown MetricNotificationType = "COOLDOWN"
+)
+
+// +k8s:deepcopy-gen=false
+// +k8s:openapi-gen=false
+// +kubebuilder:skipversion
+type MetricNotification struct {
+	Type                      MetricNotificationType `json:"type"`
+	MetricType                MetricSourceType       `json:"metricType"`
+	Name                      string                 `json:"name"`
+	CurrentAverageValue       resource.Quantity      `json:"currentAverageValue,omitempty"`
+	TargetAverageValue        *resource.Quantity     `json:"targetAverageValue,omitempty"`
+	CurrentAverageUtilization *int32                 `json:"currentAverageUtilization,omitempty"`
+	TargetAverageUtilization  *int32                 `json:"targetAverageUtilization,omitempty"`
+	ScrapeTime                time.Time              `json:"scrapeTime"`
 }
 
 // +k8s:deepcopy-gen=false
 // +k8s:openapi-gen=false
 // +kubebuilder:skipversion
-type MetricReport []MetricAlert
+type MetricReport []MetricNotification
 
 func init() {
 	SchemeBuilder.Register(&MetricWebhook{}, &MetricWebhookList{})

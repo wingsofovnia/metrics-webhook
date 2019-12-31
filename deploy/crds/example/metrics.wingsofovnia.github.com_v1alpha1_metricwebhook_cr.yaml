@@ -15,6 +15,7 @@ spec:
     port: 8080
     path: /metrics/alerts
   scrapeInterval: 20s
+  cooldownAlert: true
   metrics:
     - type: Resource
       resource:
