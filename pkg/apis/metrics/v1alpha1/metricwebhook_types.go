@@ -62,7 +62,6 @@ type MetricSpec struct {
 	// type is the type of metric source.  It should be "Pods" or "Resource",
 	// each mapping to a matching field in the object.
 	Type MetricSourceType `json:"type"`
-
 	// pods refers to a metric describing each pod matching the selector
 	// (for example, transactions-processed-per-second). The values will be
 	// averaged together before being compared to the target value.
@@ -110,13 +109,10 @@ type ResourceMetricSource struct {
 // MetricWebhookStatus defines the observed state of MetricWebhook
 // +k8s:openapi-gen=true
 type MetricWebhookStatus struct {
-	// lastScrapeTime is the last time the MetricWebhook scraped metrics
-	// +optional
-	LastScrapeTime *metav1.Time `json:"lastScrapeTime,omitempty"`
-	// currentMetrics is the last read state of the metrics used by this MetricWebhook.
+	// metrics is the last read state of the metrics used by this MetricWebhook.
 	// +listType=set
 	// +optional
-	CurrentMetrics []MetricStatus `json:"currentMetrics"`
+	Metrics []MetricStatus `json:"metrics"`
 }
 
 // MetricStatus describes the last-read state of a single metric.
@@ -138,8 +134,7 @@ type MetricStatus struct {
 	// +optional
 	Resource *ResourceMetricStatus `json:"resource,omitempty"`
 	// scrapeTime is the last time the MetricWebhook scraped metrics
-	// +optional
-	ScrapeTime metav1.Time `json:"scrapeTime,omitempty"`
+	ScrapeTime metav1.Time `json:"scrapeTime"`
 }
 
 // PodsMetricStatus indicates the current value of a metric describing each pod
@@ -211,6 +206,11 @@ type MetricAlert struct {
 	TargetAverageUtilization  *int32             `json:"targetAverageUtilization,omitempty"`
 	ScrapeTime                time.Time          `json:"scrapeTime"`
 }
+
+// +k8s:deepcopy-gen=false
+// +k8s:openapi-gen=false
+// +kubebuilder:skipversion
+type MetricReport []MetricAlert
 
 func init() {
 	SchemeBuilder.Register(&MetricWebhook{}, &MetricWebhookList{})

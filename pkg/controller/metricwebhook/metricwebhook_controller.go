@@ -115,20 +115,17 @@ func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile
 	}()
 
 	// Fetch metric values and update MetricWebhook instance status
-	scrapeTime := metav1.Now()
 	metricStatuses, err := r.fetchCurrentMetrics(metricWebhook.Spec.Metrics, metricWebhook.Namespace, metricWebhook.Spec.Selector)
 	if err != nil {
 		reqLogger.Error(err, "failed to fetch current metric values",
 			"Spec.Selector", metricWebhook.Spec.Selector,
-			"scrapeTime", scrapeTime.Time,
 		)
 		return reconcile.Result{}, err
 	}
-	metricWebhook.Status.CurrentMetrics = metricStatuses
-	metricWebhook.Status.LastScrapeTime = &scrapeTime
+	metricWebhook.Status.Metrics = metricStatuses
 
 	// Check if any current metric values violate target thresholds and notify webhook
-	alerts := r.findMetricAlerts(metricWebhook.Spec.Metrics, metricWebhook.Status.CurrentMetrics)
+	alerts := r.findMetricAlerts(metricWebhook.Spec.Metrics, metricWebhook.Status.Metrics)
 	if len(alerts) > 0 {
 		webhookUrl, err := r.getWebhookUrl(metricWebhook.Namespace, metricWebhook.Spec.Webhook)
 		if err != nil {

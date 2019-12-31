@@ -165,9 +165,9 @@ spec:
         status:
           description: MetricWebhookStatus defines the observed state of MetricWebhook
           properties:
-            currentMetrics:
-              description: currentMetrics is the last read state of the metrics used
-                by this MetricWebhook.
+            metrics:
+              description: metrics is the last read state of the metrics used by this
+                MetricWebhook.
               items:
                 description: MetricStatus describes the last-read state of a single
                   metric.
@@ -234,14 +234,10 @@ spec:
                     - Resource
                     type: string
                 required:
+                - scrapeTime
                 - type
                 type: object
               type: array
-            lastScrapeTime:
-              description: lastScrapeTime is the last time the MetricWebhook scraped
-                metrics
-              format: date-time
-              type: string
           type: object
       type: object
   version: v1alpha1

@@ -92,7 +92,7 @@ func schema_pkg_apis_metrics_v1alpha1_MetricStatus(ref common.ReferenceCallback)
 						},
 					},
 				},
-				Required: []string{"type"},
+				Required: []string{"type", "scrapeTime"},
 			},
 		},
 		Dependencies: []string{
@@ -203,20 +203,14 @@ func schema_pkg_apis_metrics_v1alpha1_MetricWebhookStatus(ref common.ReferenceCa
 				Description: "MetricWebhookStatus defines the observed state of MetricWebhook",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"lastScrapeTime": {
-						SchemaProps: spec.SchemaProps{
-							Description: "lastScrapeTime is the last time the MetricWebhook scraped metrics",
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
-						},
-					},
-					"currentMetrics": {
+					"metrics": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
 								"x-kubernetes-list-type": "set",
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "currentMetrics is the last read state of the metrics used by this MetricWebhook.",
+							Description: "metrics is the last read state of the metrics used by this MetricWebhook.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -231,7 +225,7 @@ func schema_pkg_apis_metrics_v1alpha1_MetricWebhookStatus(ref common.ReferenceCa
 			},
 		},
 		Dependencies: []string{
-			"./pkg/apis/metrics/v1alpha1.MetricStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+			"./pkg/apis/metrics/v1alpha1.MetricStatus"},
 	}
 }
 
