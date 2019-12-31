@@ -3,6 +3,7 @@ package metricwebhook
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	metricsv1alpha1 "github.com/wingsofovnia/metrics-webhook/pkg/apis/metrics/v1alpha1"
 
@@ -12,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/controller/podautoscaler/metrics"
 	metricsclientv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
 	"k8s.io/metrics/pkg/client/custom_metrics"
@@ -25,7 +27,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller_metricwebhook")
+const controllerName = "metricwebhook-controller"
+
+var log = logf.Log.WithName(controllerName)
 
 // Add creates a new MetricWebhook Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -59,13 +63,14 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		scheme:                   mgr.GetScheme(),
 		metricsClient:            metricValuesClient,
 		metricNotificationClient: NewDefaultMetricAlertClient(),
+		eventRecorder:            mgr.GetEventRecorderFor(controllerName),
 	}, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("metricwebhook-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -88,6 +93,7 @@ type ReconcileMetricWebhook struct {
 	scheme                   *runtime.Scheme
 	metricsClient            *MetricValuesClient
 	metricNotificationClient *MetricNotificationClient
+	eventRecorder            record.EventRecorder
 }
 
 // Reconcile reads that state of the cluster for a MetricWebhook object and makes changes based on the state read
@@ -112,6 +118,7 @@ func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile
 	defer func() {
 		err = r.client.Status().Update(context.TODO(), metricWebhook)
 		if err != nil {
+			r.eventRecorder.Event(metricWebhook, v1.EventTypeWarning, "FailedSaveStatus", err.Error())
 			reqLogger.Error(err, "failed to update MetricWebhook status")
 		}
 	}()
@@ -119,6 +126,7 @@ func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile
 	// Fetch metric values and update MetricWebhook instance status
 	currMetrics, err := r.fetchCurrentMetrics(metricWebhook.Spec.Metrics, metricWebhook.Namespace, metricWebhook.Spec.Selector)
 	if err != nil {
+		r.eventRecorder.Event(metricWebhook, v1.EventTypeWarning, "FailedFetchMetrics", err.Error())
 		reqLogger.Error(err, "failed to fetch current metric values",
 			"Spec.Selector", metricWebhook.Spec.Selector,
 		)
@@ -138,10 +146,14 @@ func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile
 		metricReport = r.createMetricReport(alertingMetrics, []metricsv1alpha1.MetricStatus{})
 	}
 
+	// Post event(s) describing the metric notifications to be sent
+	r.postMetricReportEvents(metricWebhook, metricReport)
+
 	// Send out metric notifications
 	if len(metricReport) > 0 {
 		webhookUrl, err := r.compileWebhookUrl(metricWebhook.Namespace, metricWebhook.Spec.Webhook)
 		if err != nil {
+			r.eventRecorder.Event(metricWebhook, v1.EventTypeWarning, "FailedSendReport", err.Error())
 			reqLogger.Error(err, "failed to resolve webhook url")
 			return reconcile.Result{}, err
 		}
@@ -151,11 +163,14 @@ func (r *ReconcileMetricWebhook) Reconcile(request reconcile.Request) (reconcile
 		)
 		err = r.metricNotificationClient.notify(webhookUrl, metricReport)
 		if err != nil {
+			r.eventRecorder.Event(metricWebhook, v1.EventTypeWarning, "FailedSendReport", err.Error())
 			reqLogger.Info("failed to notify webhook",
 				"Spec.Webhook.Url(resolved)", webhookUrl,
 				"Error", err,
 			)
 			// Stay resilient, proceed normally
+		} else {
+			r.eventRecorder.Eventf(metricWebhook, v1.EventTypeNormal, "SucceededReport", "The webhook (url = %s) was successfully notified with a report of all %d notifications", webhookUrl, len(metricReport))
 		}
 	}
 
@@ -339,6 +354,28 @@ func (r *ReconcileMetricWebhook) compileWebhookUrl(namespace string, webhookSpec
 		webhookUrl = webhookUrl + webhookPath
 	}
 	return webhookUrl, nil
+}
+
+func (r *ReconcileMetricWebhook) postMetricReportEvents(o runtime.Object, report metricsv1alpha1.MetricReport) {
+	var alertingMetrics []string
+	var cooldownMetric []string
+	for _, notification := range report {
+		switch notification.Type {
+		case metricsv1alpha1.Alert:
+			alertingMetrics = append(alertingMetrics, notification.String())
+		case metricsv1alpha1.Cooldown:
+			cooldownMetric = append(cooldownMetric, notification.String())
+		}
+	}
+
+	if len(alertingMetrics) > 0 {
+		alertingMetricsStatus := strings.Join(alertingMetrics, ", ")
+		r.eventRecorder.Eventf(o, v1.EventTypeNormal, "NewAlerts", "New alerting notifications: %s", alertingMetricsStatus)
+	}
+	if len(cooldownMetric) > 0 {
+		cooldownMetricStatus := strings.Join(cooldownMetric, ", ")
+		r.eventRecorder.Eventf(o, v1.EventTypeNormal, "NewCooldowns", "New cooldown notifications: %s", cooldownMetricStatus)
+	}
 }
 
 func createMetricNotification(typ metricsv1alpha1.MetricNotificationType, metric metricsv1alpha1.MetricStatus) metricsv1alpha1.MetricNotification {

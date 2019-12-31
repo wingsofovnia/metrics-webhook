@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -217,12 +219,12 @@ type MetricNotificationType string
 const (
 	// Alert metric notification informs about a metric those
 	// values exceeded the ones set by its thresholds.
-	Alert MetricNotificationType = "ALERT"
+	Alert MetricNotificationType = "Alert"
 	// Cooldown metric notification informs about a metric that
 	// has improved to the extend of meeting thresholds set. This
 	// notification may be used by the target application in order
 	// to correlate internal adjustments with metric values improvements.
-	Cooldown MetricNotificationType = "COOLDOWN"
+	Cooldown MetricNotificationType = "Cooldown"
 )
 
 // +k8s:deepcopy-gen=false
@@ -237,6 +239,20 @@ type MetricNotification struct {
 	CurrentAverageUtilization *int32                 `json:"currentAverageUtilization,omitempty"`
 	TargetAverageUtilization  *int32                 `json:"targetAverageUtilization,omitempty"`
 	ScrapeTime                time.Time              `json:"scrapeTime"`
+}
+
+func (n *MetricNotification) String() string {
+	var tokens []string
+
+	tokens = append(tokens, fmt.Sprintf("name = %s", n.Name))
+	if n.TargetAverageUtilization != nil {
+		tokens = append(tokens, fmt.Sprintf("avg utilization = %d%%/%d%%", n.CurrentAverageUtilization, n.TargetAverageUtilization))
+	} else {
+		tokens = append(tokens, fmt.Sprintf("avg value = %s/%s", n.CurrentAverageValue.String(), n.TargetAverageValue.String()))
+	}
+	tokens = append(tokens, fmt.Sprintf("scrape time = %s", n.ScrapeTime.String()))
+
+	return string(n.Type) + "[" + strings.Join(tokens, ", ") + "]"
 }
 
 // +k8s:deepcopy-gen=false
