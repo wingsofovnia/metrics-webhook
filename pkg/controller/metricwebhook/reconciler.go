@@ -114,24 +114,26 @@ func (r *MetricWebhookReconciler) Reconcile(request reconcile.Request) (reconcil
 
 	// Send out metric notifications
 	if len(metricReport) > 0 {
-		webhookUrl, err := r.compileWebhookUrl(metricWebhook.Namespace, metricWebhook.Spec.Webhook)
+		webhookUrls, err := r.compileWebhookUrl(metricWebhook.Spec.Webhook, metricWebhook.Namespace, metricWebhook.Spec.Selector)
 		if err != nil {
 			r.eventRecorder.Event(metricWebhook, v1.EventTypeWarning, "FailedSendReport", err.Error())
 			reqLogger.Error(err, "failed to resolve webhook url")
 			return reconcile.Result{}, err
 		}
-		reqLogger.Info("notifying webhook",
-			"Spec.Webhook.Url(resolved)", webhookUrl,
-			"metricReport", metricReport,
-		)
-		err = r.metricNotificationClient.notify(webhookUrl, metricReport)
-		if err != nil {
-			r.eventRecorder.Event(metricWebhook, v1.EventTypeWarning, "FailedSendReport", err.Error())
-			reqLogger.Info("failed to notify webhook",
+		for _, webhookUrl := range webhookUrls {
+			reqLogger.Info("notifying webhook",
 				"Spec.Webhook.Url(resolved)", webhookUrl,
-				"Error", err,
+				"metricReport", metricReport,
 			)
-			// Stay resilient, proceed normally
+			err = r.metricNotificationClient.notify(webhookUrl, metricReport)
+			if err != nil {
+				r.eventRecorder.Event(metricWebhook, v1.EventTypeWarning, "FailedSendReport", err.Error())
+				reqLogger.Info("failed to notify webhook",
+					"Spec.Webhook.Url(resolved)", webhookUrl,
+					"Error", err,
+				)
+				// Stay resilient, proceed normally
+			}
 		}
 	}
 
@@ -280,39 +282,68 @@ func (r *MetricWebhookReconciler) createMetricReport(alertingMetrics, improvedMe
 	return report
 }
 
-func (r *MetricWebhookReconciler) compileWebhookUrl(namespace string, webhookSpec metricsv1alpha1.Webhook) (string, error) {
-	if specWebhookUrl := webhookSpec.Url; specWebhookUrl != "" {
-		return specWebhookUrl, nil
-	}
-
-	specWebhookServiceKey := types.NamespacedName{
-		Name:      webhookSpec.Service,
-		Namespace: namespace,
-	}
-
-	webhookService := &v1.Service{}
-	err := r.client.Get(context.TODO(), specWebhookServiceKey, webhookService)
-	if err != nil {
-		return "", fmt.Errorf("failed to fetch webhook service: %v", err)
-	}
-
-	portKnown := false
-	for _, portSpec := range webhookService.Spec.Ports {
-		if portSpec.Port == webhookSpec.Port {
-			portKnown = true
+func (r *MetricWebhookReconciler) compileWebhookUrl(spec metricsv1alpha1.Webhook, namespace string, labelSelector metav1.LabelSelector) ([]string, error) {
+	switch {
+	case spec.Url != "":
+		// Use explicit url if set
+		return []string{spec.Url}, nil
+	case spec.Service != "":
+		// Lookup for a service to assert the port from spec if set
+		// and compile url to the service
+		webhookService := &v1.Service{}
+		err := r.client.Get(context.TODO(), types.NamespacedName{
+			Name:      spec.Service,
+			Namespace: namespace,
+		}, webhookService)
+		if err != nil {
+			return []string{}, fmt.Errorf("failed to fetch webhook service: %v", err)
 		}
-	}
-	if !portKnown {
-		return "", fmt.Errorf("webhook service doesnt expose port '%d' required (available = %v)",
-			webhookSpec.Port, webhookService.Spec.Ports)
-	}
 
-	webhookUrl := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d",
-		webhookService.Name, namespace, webhookSpec.Port)
-	if webhookPath := webhookSpec.Path; webhookPath != "" {
-		webhookUrl = webhookUrl + webhookPath
+		portKnown := false
+		for _, portSpec := range webhookService.Spec.Ports {
+			if portSpec.Port == spec.Port {
+				portKnown = true
+			}
+		}
+		if !portKnown {
+			return []string{}, fmt.Errorf("webhook service doesnt expose port '%d' required (available = %v)",
+				spec.Port, webhookService.Spec.Ports)
+		}
+
+		webhookUrl := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d",
+			webhookService.Name, namespace, spec.Port)
+		if webhookPath := spec.Path; webhookPath != "" {
+			webhookUrl = webhookUrl + webhookPath
+		}
+		return []string{webhookUrl}, nil
+	default:
+		// Match all pods by label
+		podSelector, err := metav1.LabelSelectorAsSelector(&labelSelector)
+		if err != nil {
+			return []string{}, err
+		}
+
+		var pods v1.PodList
+		err = r.client.List(context.TODO(), &pods, &client.ListOptions{
+			LabelSelector: podSelector,
+			Namespace:     namespace,
+		})
+		if err != nil {
+			return []string{}, err
+		}
+
+		var webhookUrls []string
+		for _, pod := range pods.Items {
+			webhookUrl := fmt.Sprintf("http://%s:%d",
+				pod.Status.PodIP, spec.Port)
+			if webhookPath := spec.Path; webhookPath != "" {
+				webhookUrl = webhookUrl + webhookPath
+			}
+			webhookUrls = append(webhookUrls, webhookUrl)
+		}
+
+		return webhookUrls, nil
 	}
-	return webhookUrl, nil
 }
 
 func (r *MetricWebhookReconciler) postMetricReportEvents(o runtime.Object, report metricsv1alpha1.MetricReport) {

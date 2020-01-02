@@ -31,10 +31,14 @@ type MetricWebhookSpec struct {
 // Webhook describes the web endpoint that the operator calls on metrics reaching their thresholds
 // +k8s:openapi-gen=true
 type Webhook struct {
-	// Explicit URL to hit, instead of matching service
+	// Explicit URL to hit, instead of matching service.
+	// If neither Url nor Service are specified, the webhook
+	// triggers all matching pods
 	// +optional
 	Url string `json:"url"`
 	// Referent service
+	// If neither Url nor Service are specified, the webhook
+	// triggers all matching pods
 	// +optional
 	Service string `json:"service"`
 	// Service port the webserver serves on
