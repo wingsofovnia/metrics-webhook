@@ -272,6 +272,14 @@ func (r *MetricReport) HasAlerts() bool {
 	return false
 }
 
+func (r *MetricReport) String() string {
+	var tokens []string
+	for _, notification := range *r {
+		tokens = append(tokens, notification.String())
+	}
+	return strings.Join(tokens, ", ")
+}
+
 func init() {
 	SchemeBuilder.Register(&MetricWebhook{}, &MetricWebhookList{})
 }

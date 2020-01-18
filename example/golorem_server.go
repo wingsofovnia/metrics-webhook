@@ -59,15 +59,25 @@ func main() {
 		webhookServer := lib.NewWebhookServer(lib.DefaultWebhookServerConfig(), func(report v1alpha1.MetricReport) {
 			adjustments := make(lib.Adjustments)
 
+			log.Infof("Incoming notifications: ", report.String())
+
 			if report.HasAlerts() {
 				suggestions := correlator.SuggestAdjustments(report)
 				if loremSuggestion, set := suggestions[loremConfig]; set {
+					log.Infof("Correlator suggests $%s$ = %.2f", loremConfig, loremSuggestion)
 					adjustments[loremConfig] = loremSuggestion
 				} else {
+					log.Infof("Correlator gave no suggestions, default adjustment $%s$ = %.2f", loremConfig, loremConfigDefault)
 					adjustments[loremConfig] = float64(loremConfigDefault)
 				}
 
+				prevLoremChars := server.loremChars
 				server.loremChars = server.loremChars + int(adjustments[loremConfig])
+
+				log.Infof("$%s$ has been adjusted (was = %d, adjustment = %.2f, now = %d)",
+					loremConfig, prevLoremChars, adjustments[loremConfig], server.loremChars)
+			} else {
+				log.Infoln("No alerts present, no adjustments has been made.")
 			}
 
 			correlator.RegisterAdjustments(report, adjustments)
