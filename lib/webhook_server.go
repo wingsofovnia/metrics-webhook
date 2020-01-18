@@ -28,6 +28,7 @@ type WebhookServerConfig struct {
 
 func DefaultWebhookServerConfig() *WebhookServerConfig {
 	return &WebhookServerConfig{
+		Addr:         ":4030",
 		ReadTimeout:  time.Second * 15,
 		WriteTimeout: time.Second * 15,
 		IdleTimeout:  time.Second * 60,
@@ -75,7 +76,7 @@ func NewWebhookServer(cfg *WebhookServerConfig, callback Webhook) *WebhookServer
 }
 
 func (srv *WebhookServer) ListenAndServe() {
-	srv.logger.Infof("Listening on %v", srv.httpServer.Addr)
+	srv.logger.Infof("[Webhook] Listening and serving on %s", srv.httpServer.Addr)
 	go func() {
 		if err := srv.httpServer.ListenAndServe(); err != nil {
 			srv.logger.Error(err)

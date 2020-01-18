@@ -2,9 +2,13 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
+
+	"github.com/wingsofovnia/metrics-webhook/lib"
+	"github.com/wingsofovnia/metrics-webhook/pkg/apis/metrics/v1alpha1"
 )
 
 type LoremServer struct {
@@ -31,7 +35,7 @@ func NewDefaultLoremServer() *LoremServer {
 }
 
 func (l *LoremServer) ListenAndServe() error {
-	log.Printf("Listening and serving on %s", l.server.Addr)
+	log.Infof("[GoLorem] Listening and serving on %s", l.server.Addr)
 	return l.server.ListenAndServe()
 }
 
@@ -46,5 +50,31 @@ func (l *LoremServer) lorem() string {
 
 func main() {
 	server := NewDefaultLoremServer()
+	go func() {
+		const loremConfig = "lorem"
+		const loremConfigDefault = -len(Lipsum)
+
+		correlator := lib.NewDefaultAdjustmentCorrelator()
+
+		webhookServer := lib.NewWebhookServer(lib.DefaultWebhookServerConfig(), func(report v1alpha1.MetricReport) {
+			adjustments := make(lib.Adjustments)
+
+			if report.HasAlerts() {
+				suggestions := correlator.SuggestAdjustments(report)
+				if loremSuggestion, set := suggestions[loremConfig]; set {
+					adjustments[loremConfig] = loremSuggestion
+				} else {
+					adjustments[loremConfig] = float64(loremConfigDefault)
+				}
+
+				server.loremChars = server.loremChars + int(adjustments[loremConfig])
+			}
+
+			correlator.RegisterAdjustments(report, adjustments)
+		})
+
+		webhookServer.ListenAndServe()
+	}()
+
 	server.ListenAndServe()
 }

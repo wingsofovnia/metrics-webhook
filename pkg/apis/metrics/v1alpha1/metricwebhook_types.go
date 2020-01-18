@@ -263,6 +263,15 @@ func (n *MetricNotification) String() string {
 // +kubebuilder:skipversion
 type MetricReport []MetricNotification
 
+func (r *MetricReport) HasAlerts() bool {
+	for _, n := range *r {
+		if n.Type == Alert {
+			return true
+		}
+	}
+	return false
+}
+
 func init() {
 	SchemeBuilder.Register(&MetricWebhook{}, &MetricWebhookList{})
 }

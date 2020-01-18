@@ -32,10 +32,17 @@ type AdjustmentCorrelator struct {
 const minAdjustmentsBufferFlushCap = 2
 
 func NewAdjustmentCorrelator(adjustmentsBufferFlushCap int) *AdjustmentCorrelator {
+	if adjustmentsBufferFlushCap < minAdjustmentsBufferFlushCap {
+		adjustmentsBufferFlushCap = minAdjustmentsBufferFlushCap
+	}
 	return &AdjustmentCorrelator{
 		adjustmentsBufferFlushCap: adjustmentsBufferFlushCap,
 		averageCorrelations:       make(AverageCorrelations),
 	}
+}
+
+func NewDefaultAdjustmentCorrelator() *AdjustmentCorrelator {
+	return NewAdjustmentCorrelator(minAdjustmentsBufferFlushCap)
 }
 
 func (c *AdjustmentCorrelator) RegisterAdjustments(report v1alpha1.MetricReport, appliedAdjustments Adjustments) {
