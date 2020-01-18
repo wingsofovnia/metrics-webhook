@@ -3,6 +3,7 @@ module github.com/wingsofovnia/metrics-webhook
 go 1.13
 
 require (
+	github.com/cheggaaa/pb/v3 v3.0.4
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.2
 	github.com/gorilla/mux v1.7.1
