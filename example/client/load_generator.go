@@ -12,12 +12,12 @@ import (
 )
 
 func main() {
-	clients := flag.Int("clients", 100, "Amount of concurrent clients (default: 10)")
-	server := flag.String("server", "https://google.com", "Url to send requests to (default: https://google.com)")
+	clientsInit := flag.Int("clients", 10, "Amount of concurrent clients in the first generation (default: 100)")
+	clientsIncr := flag.Int("increment", 5, "Amount of clients to add up with every generation (default: 0)")
+	server := flag.String("server", "https://www.google.com/maps", "Url to send requests to (default: https://google.com)")
 	method := flag.String("method", "GET", "HTTP request method (default: GET)")
 	nobody := flag.Bool("nobody", false, "Ignores response body (default: false)")
 	maxbody := flag.Int64("maxbody", -1, "Amount of bytes to read from response if nobody = false, -1 = full (default: -1)")
-	clientSync := flag.Bool("sync", true, "Enables client request synchronization for a more smooth load (default: true)")
 	flag.Parse()
 
 	log.SetFormatter(&log.TextFormatter{
@@ -26,28 +26,28 @@ func main() {
 	})
 
 	log.Infoln("Load Generator Configuration:")
-	log.Infof(" - clients = %d", *clients)
-	log.Infof(" - server = %s", *server)
-	log.Infof(" - method = %s", *method)
-	log.Infof(" - nobody = %t", *nobody)
-	log.Infof(" - maxbody = %d", *maxbody)
-	log.Infof(" - client synchronization = %t", *clientSync)
+	log.Infof(" - Request = %s %s", *method, *server)
+	if *clientsIncr <= 0 {
+		log.Infof(" - Concurrent requests: %d", *clientsInit)
+	} else {
+		log.Infof(" - Concurrent requests: %d with +%d increment", *clientsInit, *clientsIncr)
+	}
+	log.Infof(" - Fetch body: %t", *nobody)
+	if *maxbody > 0 {
+		log.Infof(" - Body limitation = %d bytes", *maxbody)
+	}
 
 	var wg sync.WaitGroup
 	for g := 1; ; g++ {
-		log.Infof("Generation #%d\n", g)
-		bar := pb.StartNew(*clients)
-		for c := 0; c < *clients; c++ {
-			if *clientSync {
-				wg.Add(1)
-			}
+		clients := *clientsInit + *clientsIncr*(g-1)
+		bar := pb.StartNew(clients)
+		for c := 1; c <= clients; c++ {
+			wg.Add(1)
 			go func(clientId int) {
-				defer bar.Increment()
-				if *clientSync {
-					defer func() {
-						wg.Done()
-					}()
-				}
+				defer func() {
+					bar.Increment()
+					wg.Done()
+				}()
 
 				req, err := http.NewRequest(*method, *server, nil)
 				if err != nil {
