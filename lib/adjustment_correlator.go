@@ -163,6 +163,8 @@ func (c *AdjustmentCorrelator) Recorrelate() {
 			}
 		}
 	}
+
+	c.adjustmentsBuffer = nil
 }
 
 func (c *AdjustmentCorrelator) SuggestAdjustments(metricsReported v1alpha1.MetricReport) Adjustments {
@@ -203,7 +205,6 @@ func (c *AdjustmentCorrelator) SuggestAdjustments(metricsReported v1alpha1.Metri
 		}
 	}
 
-	c.adjustmentsBuffer = nil
 	return suggestions
 }
 

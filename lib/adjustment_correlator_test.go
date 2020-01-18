@@ -9,7 +9,7 @@ import (
 	"github.com/wingsofovnia/metrics-webhook/pkg/apis/metrics/v1alpha1"
 )
 
-func TestAdjustmentCorrelator_Recorrelation(t *testing.T) {
+func TestAdjustmentCorrelator_Recorrelate(t *testing.T) {
 	correlator := NewAdjustmentCorrelator(-1) // cap < 1 ~ manual Recorrelation()
 
 	// Round one
@@ -74,10 +74,12 @@ func TestAdjustmentCorrelator_Recorrelation(t *testing.T) {
 	assert.Contains(t, correlator.averageCorrelations, "quality")
 	assert.Contains(t, correlator.averageCorrelations["quality"], "cpu")
 	assert.Contains(t, correlator.averageCorrelations["quality"], "ram")
+	assert.Equal(t, 2, correlator.averageCorrelations["quality"]["cpu"].Among)
 	assert.InDelta(t,
 		(40.0/2.0/-8.0+20.0/2.0/-6.0)/2.0, // Avg between first and second improvement (measurement delta)
 		correlator.averageCorrelations["quality"]["cpu"].Value.Utilization,
 		0.1)
+	assert.Equal(t, 2, correlator.averageCorrelations["quality"]["ram"].Among)
 	assert.InDelta(t,
 		(20.0/2.0/-8.0+10.0/2.0/-6.0)/2.0,
 		correlator.averageCorrelations["quality"]["ram"].Value.Utilization,
@@ -86,12 +88,148 @@ func TestAdjustmentCorrelator_Recorrelation(t *testing.T) {
 	assert.Contains(t, correlator.averageCorrelations, "pages")
 	assert.Contains(t, correlator.averageCorrelations["pages"], "cpu")
 	assert.Contains(t, correlator.averageCorrelations["pages"], "ram")
+	assert.Equal(t, 2, correlator.averageCorrelations["pages"]["cpu"].Among)
 	assert.InDelta(t,
 		(40.0/2.0/-4.0+20.0/2.0/-2.0)/2.0, // Avg between first and second improvement (measurement delta)
 		correlator.averageCorrelations["pages"]["cpu"].Value.Utilization,
 		0.1)
+	assert.Equal(t, 2, correlator.averageCorrelations["pages"]["ram"].Among)
 	assert.InDelta(t,
 		(20.0/2.0/-4.0+20.0/2.0/-4.0)/2.0,
+		correlator.averageCorrelations["pages"]["ram"].Value.Utilization,
+		0.1)
+}
+
+func TestAdjustmentCorrelator_Recorrelate_Multiple(t *testing.T) {
+	correlator := NewAdjustmentCorrelator(-1) // cap < 1 ~ manual Recorrelation()
+
+	// 50 improvement for -5, -5 adjustment
+	correlator.RegisterAdjustments(
+		v1alpha1.MetricReport{
+			v1alpha1.MetricNotification{
+				Type:                      v1alpha1.Alert,
+				Name:                      "cpu",
+				CurrentAverageValue:       func() resource.Quantity { q, _ := resource.ParseQuantity("100Mi"); return q }(),
+				CurrentAverageUtilization: func(i int32) *int32 { return &i }(100),
+			},
+			v1alpha1.MetricNotification{
+				Type:                      v1alpha1.Alert,
+				Name:                      "ram",
+				CurrentAverageValue:       func() resource.Quantity { q, _ := resource.ParseQuantity("100Mi"); return q }(),
+				CurrentAverageUtilization: func(i int32) *int32 { return &i }(100),
+			},
+		}, Adjustments{
+			"quality": float64(-5),
+			"pages":   float64(-5),
+		})
+	correlator.RegisterAdjustments(
+		v1alpha1.MetricReport{
+			v1alpha1.MetricNotification{
+				Type:                      v1alpha1.Alert,
+				Name:                      "cpu",
+				CurrentAverageValue:       func() resource.Quantity { q, _ := resource.ParseQuantity("50Mi"); return q }(),
+				CurrentAverageUtilization: func(i int32) *int32 { return &i }(50),
+			},
+			v1alpha1.MetricNotification{
+				Type:                      v1alpha1.Alert,
+				Name:                      "ram",
+				CurrentAverageValue:       func() resource.Quantity { q, _ := resource.ParseQuantity("50Mi"); return q }(),
+				CurrentAverageUtilization: func(i int32) *int32 { return &i }(50),
+			},
+		}, Adjustments{})
+
+	correlator.Recorrelate()
+
+	assert.Contains(t, correlator.averageCorrelations, "quality")
+	assert.Contains(t, correlator.averageCorrelations["quality"], "cpu")
+	assert.Contains(t, correlator.averageCorrelations["quality"], "ram")
+	assert.Equal(t, 1, correlator.averageCorrelations["quality"]["cpu"].Among)
+	assert.InDelta(t,
+		50.0/2.0/-5.0,
+		correlator.averageCorrelations["quality"]["cpu"].Value.Utilization,
+		0.1)
+	assert.Equal(t, 1, correlator.averageCorrelations["quality"]["ram"].Among)
+	assert.InDelta(t,
+		50.0/2.0/-5.0,
+		correlator.averageCorrelations["quality"]["ram"].Value.Utilization,
+		0.1)
+
+	assert.Contains(t, correlator.averageCorrelations, "pages")
+	assert.Contains(t, correlator.averageCorrelations["pages"], "cpu")
+	assert.Contains(t, correlator.averageCorrelations["pages"], "ram")
+	assert.Equal(t, 1, correlator.averageCorrelations["pages"]["cpu"].Among)
+	assert.InDelta(t,
+		50.0/2.0/-5.0,
+		correlator.averageCorrelations["pages"]["cpu"].Value.Utilization,
+		0.1)
+	assert.Equal(t, 1, correlator.averageCorrelations["pages"]["ram"].Among)
+	assert.InDelta(t,
+		50.0/2.0/-5.0,
+		correlator.averageCorrelations["pages"]["ram"].Value.Utilization,
+		0.1)
+
+	// 100 improvement for the same -5, -5 adjustment
+	correlator.RegisterAdjustments(
+		v1alpha1.MetricReport{
+			v1alpha1.MetricNotification{
+				Type:                      v1alpha1.Alert,
+				Name:                      "cpu",
+				CurrentAverageValue:       func() resource.Quantity { q, _ := resource.ParseQuantity("200Mi"); return q }(),
+				CurrentAverageUtilization: func(i int32) *int32 { return &i }(200),
+			},
+			v1alpha1.MetricNotification{
+				Type:                      v1alpha1.Alert,
+				Name:                      "ram",
+				CurrentAverageValue:       func() resource.Quantity { q, _ := resource.ParseQuantity("200Mi"); return q }(),
+				CurrentAverageUtilization: func(i int32) *int32 { return &i }(200),
+			},
+		}, Adjustments{
+			"quality": float64(-5),
+			"pages":   float64(-5),
+		})
+	correlator.RegisterAdjustments(
+		v1alpha1.MetricReport{
+			v1alpha1.MetricNotification{
+				Type:                      v1alpha1.Alert,
+				Name:                      "cpu",
+				CurrentAverageValue:       func() resource.Quantity { q, _ := resource.ParseQuantity("100Mi"); return q }(),
+				CurrentAverageUtilization: func(i int32) *int32 { return &i }(100),
+			},
+			v1alpha1.MetricNotification{
+				Type:                      v1alpha1.Alert,
+				Name:                      "ram",
+				CurrentAverageValue:       func() resource.Quantity { q, _ := resource.ParseQuantity("100Mi"); return q }(),
+				CurrentAverageUtilization: func(i int32) *int32 { return &i }(100),
+			},
+		}, Adjustments{})
+
+	correlator.Recorrelate()
+
+	assert.Contains(t, correlator.averageCorrelations, "quality")
+	assert.Contains(t, correlator.averageCorrelations["quality"], "cpu")
+	assert.Contains(t, correlator.averageCorrelations["quality"], "ram")
+	assert.Equal(t, 2, correlator.averageCorrelations["quality"]["cpu"].Among)
+	assert.InDelta(t,
+		(50.0/2.0/-5.0 + 100.0/2.0/-5.0) / 2,
+		correlator.averageCorrelations["quality"]["cpu"].Value.Utilization,
+		0.1)
+	assert.Equal(t, 2, correlator.averageCorrelations["quality"]["ram"].Among)
+	assert.InDelta(t,
+		(50.0/2.0/-5.0 + 100.0/2.0/-5.0) / 2,
+		correlator.averageCorrelations["quality"]["ram"].Value.Utilization,
+		0.1)
+
+	assert.Contains(t, correlator.averageCorrelations, "pages")
+	assert.Contains(t, correlator.averageCorrelations["pages"], "cpu")
+	assert.Contains(t, correlator.averageCorrelations["pages"], "ram")
+	assert.Equal(t, 2, correlator.averageCorrelations["pages"]["cpu"].Among)
+	assert.InDelta(t,
+		(50.0/2.0/-5.0 + 100.0/2.0/-5.0) / 2,
+		correlator.averageCorrelations["pages"]["cpu"].Value.Utilization,
+		0.1)
+	assert.Equal(t, 2, correlator.averageCorrelations["pages"]["ram"].Among)
+	assert.InDelta(t,
+		(50.0/2.0/-5.0 + 100.0/2.0/-5.0) / 2,
 		correlator.averageCorrelations["pages"]["ram"].Value.Utilization,
 		0.1)
 }
@@ -141,10 +279,12 @@ func TestAdjustmentCorrelator_SuggestAdjustments(t *testing.T) {
 	assert.Contains(t, correlator.averageCorrelations, "quality")
 	assert.Contains(t, correlator.averageCorrelations["quality"], "cpu")
 	assert.Contains(t, correlator.averageCorrelations["quality"], "ram")
+	assert.Equal(t, 1, correlator.averageCorrelations["quality"]["cpu"].Among)
 	assert.InDelta(t,
-		50.0/2.0/-5.0, // Avg between first and second improvement (measurement delta)
+		50.0/2.0/-5.0,
 		correlator.averageCorrelations["quality"]["cpu"].Value.Utilization,
 		0.1)
+	assert.Equal(t, 1, correlator.averageCorrelations["quality"]["ram"].Among)
 	assert.InDelta(t,
 		50.0/2.0/-5.0,
 		correlator.averageCorrelations["quality"]["ram"].Value.Utilization,
@@ -153,10 +293,12 @@ func TestAdjustmentCorrelator_SuggestAdjustments(t *testing.T) {
 	assert.Contains(t, correlator.averageCorrelations, "pages")
 	assert.Contains(t, correlator.averageCorrelations["pages"], "cpu")
 	assert.Contains(t, correlator.averageCorrelations["pages"], "ram")
+	assert.Equal(t, 1, correlator.averageCorrelations["pages"]["cpu"].Among)
 	assert.InDelta(t,
-		50.0/2.0/-5.0, // Avg between first and second improvement (measurement delta)
+		50.0/2.0/-5.0,
 		correlator.averageCorrelations["pages"]["cpu"].Value.Utilization,
 		0.1)
+	assert.Equal(t, 1, correlator.averageCorrelations["pages"]["ram"].Among)
 	assert.InDelta(t,
 		50.0/2.0/-5.0,
 		correlator.averageCorrelations["pages"]["ram"].Value.Utilization,
