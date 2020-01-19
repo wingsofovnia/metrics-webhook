@@ -1,0 +1,18 @@
+apiVersion: metrics.wingsofovnia.github.com/v1alpha1
+kind: MetricWebhook
+metadata:
+  name: golorem-metricwebhook
+spec:
+  selector:
+    matchLabels:
+      run: golorem
+  webhook:
+    port: 4030
+    path: /metrics-webhook
+  scrapeInterval: 30s
+  cooldownAlert: true
+  metrics:
+    - type: Resource
+      resource:
+        name: memory
+        targetAverageUtilization: 10

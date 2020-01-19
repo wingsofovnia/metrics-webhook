@@ -7,4 +7,4 @@ WORKDIR /go/src/github.com/wingsofovnia/metrics-webhook/example/server
 RUN go build .
 ENTRYPOINT /go/src/github.com/wingsofovnia/metrics-webhook/example/server/server
 
-EXPOSE 8080
+EXPOSE 8080 4030

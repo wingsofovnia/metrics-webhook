@@ -31,7 +31,7 @@ func NewLoremServer(addr string, loremChars int) *LoremServer {
 }
 
 func NewDefaultLoremServer() *LoremServer {
-	return NewLoremServer(":8080", len(Lipsum)*3)
+	return NewLoremServer(":8080", len(Lipsum)*12000)
 }
 
 func (l *LoremServer) ListenAndServe() error {
@@ -63,8 +63,9 @@ func main() {
 
 			if report.HasAlerts() {
 				suggestions := correlator.SuggestAdjustments(report)
+
 				if loremSuggestion, set := suggestions[loremConfig]; set {
-					log.Infof("Correlator suggests $%s$ = %.2f", loremConfig, loremSuggestion)
+					log.Infof("Correlator suggests $%s$ = %f", loremConfig, loremSuggestion)
 					adjustments[loremConfig] = loremSuggestion
 				} else {
 					log.Infof("Correlator gave no suggestions, default adjustment $%s$ = %d", loremConfig, loremConfigDefault)
@@ -74,7 +75,7 @@ func main() {
 				prevLoremChars := server.loremChars
 				server.loremChars = server.loremChars + int(adjustments[loremConfig])
 
-				log.Infof("$%s$ has been adjusted (was = %d, adjustment = %.2f, now = %d)",
+				log.Infof("$%s$ has been adjusted (was = %d, adjustment = %f, now = %d)",
 					loremConfig, prevLoremChars, adjustments[loremConfig], server.loremChars)
 			} else {
 				log.Infoln("No alerts present, no adjustments has been made.")

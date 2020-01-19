@@ -31,7 +31,7 @@ func main() {
 		fmt.Printf(" - Concurrent requests: %d\n", *genClients)
 	}
 	fmt.Printf(" - Re-enqueue delay: %s\n", genDuration.String())
-	fmt.Printf(" - Fetch body: %t\n", *nobody)
+	fmt.Printf(" - Fetch body: %t\n", !*nobody)
 	if *maxbody > 0 {
 		fmt.Printf(" - Body limitation = %d bytes\n", *maxbody)
 	}
