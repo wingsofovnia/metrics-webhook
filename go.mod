@@ -3,7 +3,6 @@ module github.com/wingsofovnia/metrics-webhook
 go 1.13
 
 require (
-	github.com/cheggaaa/pb/v3 v3.0.4
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.2
 	github.com/gorilla/mux v1.7.1
@@ -11,6 +10,7 @@ require (
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
+	golang.org/x/sys v0.0.0-20191128015809-6d18c012aee9 // indirect
 	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.0.0
 	k8s.io/client-go v12.0.0+incompatible
