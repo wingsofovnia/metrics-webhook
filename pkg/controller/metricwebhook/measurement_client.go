@@ -2,6 +2,7 @@ package metricwebhook
 
 import (
 	"fmt"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -20,56 +21,56 @@ func NewMetricValuesClient(metricsClient metricsclient.MetricsClient, k8sClient 
 	return &MetricMeasurementClient{metricsClient: metricsClient, k8sClient: k8sClient}
 }
 
-func (f *MetricMeasurementClient) GetCurrentPodAverageValue(name string, namespace string, labelSelector metav1.LabelSelector, targetAverageValue resource.Quantity) (averageValue resource.Quantity, err error) {
+func (f *MetricMeasurementClient) GetCurrentPodAverageValue(name string, namespace string, labelSelector metav1.LabelSelector, targetAverageValue resource.Quantity) (averageValue resource.Quantity, time time.Time, err error) {
 	podSelector, err := metav1.LabelSelectorAsSelector(&labelSelector)
 	if err != nil {
-		return resource.Quantity{}, err
+		return resource.Quantity{}, time, err
 	}
 
-	metrics, _, err := f.metricsClient.GetRawMetric(name, namespace, podSelector, labels.Nothing())
+	metrics, timestamp, err := f.metricsClient.GetRawMetric(name, namespace, podSelector, labels.Nothing())
 	if err != nil {
-		return resource.Quantity{}, err
+		return resource.Quantity{}, time, err
 	}
 	_, currentUtilization := metricsclient.GetMetricUtilizationRatio(metrics, targetAverageValue.MilliValue())
-	return *resource.NewMilliQuantity(currentUtilization, resource.DecimalSI), nil
+	return *resource.NewMilliQuantity(currentUtilization, resource.DecimalSI), timestamp, nil
 }
 
-func (f *MetricMeasurementClient) GetCurrentResourceAverageValue(name v1.ResourceName, namespace string, labelSelector metav1.LabelSelector, targetAverageValue resource.Quantity) (averageValue resource.Quantity, err error) {
+func (f *MetricMeasurementClient) GetCurrentResourceAverageValue(name v1.ResourceName, namespace string, labelSelector metav1.LabelSelector, targetAverageValue resource.Quantity) (averageValue resource.Quantity, time time.Time, err error) {
 	podSelector, err := metav1.LabelSelectorAsSelector(&labelSelector)
 	if err != nil {
-		return resource.Quantity{}, err
+		return resource.Quantity{}, time, err
 	}
 
-	metrics, _, err := f.metricsClient.GetResourceMetric(name, namespace, podSelector)
+	metrics, timestamp, err := f.metricsClient.GetResourceMetric(name, namespace, podSelector)
 	if err != nil {
-		return resource.Quantity{}, err
+		return resource.Quantity{}, time, err
 	}
 	_, currentUtilization := metricsclient.GetMetricUtilizationRatio(metrics, targetAverageValue.MilliValue())
-	return *resource.NewMilliQuantity(currentUtilization, resource.DecimalSI), nil
+	return *resource.NewMilliQuantity(currentUtilization, resource.DecimalSI), timestamp, nil
 }
 
-func (f *MetricMeasurementClient) GetCurrentResourceAverageUtilization(name v1.ResourceName, namespace string, labelSelector metav1.LabelSelector, targetAverageUtilization int32) (averageUtilization int32, averageValue resource.Quantity, err error) {
+func (f *MetricMeasurementClient) GetCurrentResourceAverageUtilization(name v1.ResourceName, namespace string, labelSelector metav1.LabelSelector, targetAverageUtilization int32) (averageUtilization int32, averageValue resource.Quantity, time time.Time, err error) {
 	podSelector, err := metav1.LabelSelectorAsSelector(&labelSelector)
 	if err != nil {
-		return 0, resource.Quantity{}, err
+		return 0, resource.Quantity{}, time, err
 	}
 
 	// Get all matching pods
 	podLabels, err := metav1.LabelSelectorAsMap(&labelSelector)
 	if err != nil {
-		return 0, resource.Quantity{}, err
+		return 0, resource.Quantity{}, time, err
 	}
 	allPods, err := f.k8sClient.CoreV1().Pods(namespace).List(metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(podLabels).String(),
 	})
 	if err != nil {
-		return 0, resource.Quantity{}, err
+		return 0, resource.Quantity{}, time, err
 	}
 
 	// Get pod metrics
-	metrics, _, err := f.metricsClient.GetResourceMetric(name, namespace, podSelector)
+	metrics, timestamp, err := f.metricsClient.GetResourceMetric(name, namespace, podSelector)
 	if err != nil {
-		return 0, resource.Quantity{}, err
+		return 0, resource.Quantity{}, time, err
 	}
 
 	// Filter out pods that are either not running or not present in metrics
@@ -86,11 +87,11 @@ func (f *MetricMeasurementClient) GetCurrentResourceAverageUtilization(name v1.R
 
 	requests, err := calculatePodRequests(eligiblePods, name)
 	if err != nil {
-		return 0, resource.Quantity{}, err
+		return 0, resource.Quantity{}, time, err
 	}
 
 	_, utilization, rawUtilization, err := metricsclient.GetResourceUtilizationRatio(metrics, requests, targetAverageUtilization)
-	return utilization, *resource.NewMilliQuantity(rawUtilization, resource.DecimalSI), err
+	return utilization, *resource.NewMilliQuantity(rawUtilization, resource.DecimalSI), timestamp, err
 }
 
 // Source: https://github.com/kubernetes/kubernetes/blob/928817a26a84d9e3076d110ea30ba994912aa477/pkg/controller/podautoscaler/replica_calculator.go#L405

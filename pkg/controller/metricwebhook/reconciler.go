@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-logr/logr"
+	"time"
 
 	metricsv1alpha1 "github.com/wingsofovnia/metrics-webhook/pkg/apis/metrics/v1alpha1"
 
@@ -158,7 +159,7 @@ func (r *MetricWebhookReconciler) fetchCurrentMetrics(metricSpecs []metricsv1alp
 func (r *MetricWebhookReconciler) fetchCurrentMetric(spec metricsv1alpha1.MetricSpec, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.MetricStatus, error) {
 	switch spec.Type {
 	case metricsv1alpha1.PodsMetricSourceType:
-		currPodMetric, exceedsThreshold, err := r.fetchCurrentPodMetric(spec.Pods, namespace, labelSelector)
+		currPodMetric, exceedsThreshold, timestamp, err := r.fetchCurrentPodMetric(spec.Pods, namespace, labelSelector)
 		if err != nil {
 			return metricsv1alpha1.MetricStatus{}, err
 		}
@@ -166,10 +167,10 @@ func (r *MetricWebhookReconciler) fetchCurrentMetric(spec metricsv1alpha1.Metric
 			Type:       metricsv1alpha1.PodsMetricSourceType,
 			Alerting:   exceedsThreshold,
 			Pods:       &currPodMetric,
-			ScrapeTime: metav1.Now(),
+			ScrapeTime: metav1.NewTime(timestamp),
 		}, nil
 	case metricsv1alpha1.ResourceMetricSourceType:
-		currResourceMetric, exceedsThreshold, err := r.fetchCurrentResourceMetric(spec.Resource, namespace, labelSelector)
+		currResourceMetric, exceedsThreshold, timestamp, err := r.fetchCurrentResourceMetric(spec.Resource, namespace, labelSelector)
 		if err != nil {
 			return metricsv1alpha1.MetricStatus{}, err
 		}
@@ -177,17 +178,17 @@ func (r *MetricWebhookReconciler) fetchCurrentMetric(spec metricsv1alpha1.Metric
 			Type:       metricsv1alpha1.ResourceMetricSourceType,
 			Alerting:   exceedsThreshold,
 			Resource:   &currResourceMetric,
-			ScrapeTime: metav1.Now(),
+			ScrapeTime: metav1.NewTime(timestamp),
 		}, nil
 	default:
 		return metricsv1alpha1.MetricStatus{}, fmt.Errorf("invalid metric source type %s", spec.Type)
 	}
 }
 
-func (r *MetricWebhookReconciler) fetchCurrentPodMetric(spec *metricsv1alpha1.PodsMetricSource, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.PodsMetricStatus, bool, error) {
-	averageValue, err := r.metricsClient.GetCurrentPodAverageValue(spec.Name, namespace, labelSelector, spec.TargetAverageValue)
+func (r *MetricWebhookReconciler) fetchCurrentPodMetric(spec *metricsv1alpha1.PodsMetricSource, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.PodsMetricStatus, bool, time.Time, error) {
+	averageValue, timestamp, err := r.metricsClient.GetCurrentPodAverageValue(spec.Name, namespace, labelSelector, spec.TargetAverageValue)
 	if err != nil {
-		return metricsv1alpha1.PodsMetricStatus{}, false, err
+		return metricsv1alpha1.PodsMetricStatus{}, false, time.Time{}, err
 	}
 
 	exceedsThreshold := averageValue.Cmp(spec.TargetAverageValue) > 0
@@ -195,14 +196,14 @@ func (r *MetricWebhookReconciler) fetchCurrentPodMetric(spec *metricsv1alpha1.Po
 		Name:                spec.Name,
 		CurrentAverageValue: averageValue,
 		TargetAverageValue:  spec.TargetAverageValue,
-	}, exceedsThreshold, nil
+	}, exceedsThreshold, timestamp, nil
 }
 
-func (r *MetricWebhookReconciler) fetchCurrentResourceMetric(spec *metricsv1alpha1.ResourceMetricSource, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.ResourceMetricStatus, bool, error) {
+func (r *MetricWebhookReconciler) fetchCurrentResourceMetric(spec *metricsv1alpha1.ResourceMetricSource, namespace string, labelSelector metav1.LabelSelector) (metricsv1alpha1.ResourceMetricStatus, bool, time.Time, error) {
 	if spec.TargetAverageValue != nil {
-		averageValue, err := r.metricsClient.GetCurrentResourceAverageValue(spec.Name, namespace, labelSelector, *spec.TargetAverageValue)
+		averageValue, timestamp, err := r.metricsClient.GetCurrentResourceAverageValue(spec.Name, namespace, labelSelector, *spec.TargetAverageValue)
 		if err != nil {
-			return metricsv1alpha1.ResourceMetricStatus{}, false, err
+			return metricsv1alpha1.ResourceMetricStatus{}, false, time.Time{}, err
 		}
 
 		exceedsThreshold := averageValue.Cmp(*spec.TargetAverageValue) > 0
@@ -210,15 +211,15 @@ func (r *MetricWebhookReconciler) fetchCurrentResourceMetric(spec *metricsv1alph
 			Name:                spec.Name,
 			CurrentAverageValue: averageValue,
 			TargetAverageValue:  spec.TargetAverageValue,
-		}, exceedsThreshold, nil
+		}, exceedsThreshold, timestamp, nil
 	} else {
 		if spec.TargetAverageUtilization == nil {
-			return metricsv1alpha1.ResourceMetricStatus{}, false, fmt.Errorf("invalid resource metric source: neither a utilization target nor a value target set")
+			return metricsv1alpha1.ResourceMetricStatus{}, false, time.Time{}, fmt.Errorf("invalid resource metric source: neither a utilization target nor a value target set")
 		}
 
-		averageUtilization, averageValue, err := r.metricsClient.GetCurrentResourceAverageUtilization(spec.Name, namespace, labelSelector, *spec.TargetAverageUtilization)
+		averageUtilization, averageValue, timestamp, err := r.metricsClient.GetCurrentResourceAverageUtilization(spec.Name, namespace, labelSelector, *spec.TargetAverageUtilization)
 		if err != nil {
-			return metricsv1alpha1.ResourceMetricStatus{}, false, err
+			return metricsv1alpha1.ResourceMetricStatus{}, false, time.Time{}, err
 		}
 
 		exceedsThreshold := averageUtilization > *spec.TargetAverageUtilization
@@ -227,7 +228,7 @@ func (r *MetricWebhookReconciler) fetchCurrentResourceMetric(spec *metricsv1alph
 			CurrentAverageUtilization: &averageUtilization,
 			TargetAverageUtilization:  spec.TargetAverageUtilization,
 			CurrentAverageValue:       averageValue,
-		}, exceedsThreshold, nil
+		}, exceedsThreshold, timestamp, nil
 	}
 }
 
@@ -256,6 +257,11 @@ func (r *MetricWebhookReconciler) findImprovedAndAlertingMetrics(orig []metricsv
 
 	for name, origMetric := range metricNameToOrigin {
 		updMetric := metricNameToUpdated[name]
+
+		if origMetric.ScrapeTime.Equal(&updMetric.ScrapeTime) {
+			// New metric values have not arrived yet
+			continue
+		}
 
 		if origMetric.Alerting && !updMetric.Alerting {
 			improvedMetrics = append(improvedMetrics, updMetric)
