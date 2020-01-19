@@ -22,9 +22,9 @@ func TestNewMeasurement(t *testing.T) {
 	expectedAverageValueMeasurement, err := resource.ParseQuantity("525Mi") // 1024 - 499
 	assert.NoError(t, err)
 
-	improvement := NewMeasurementDelta(wasMeasurement, nowMeasurement)
-	assert.Equal(t, float64FromQuantityUnsafe(expectedAverageValueMeasurement), improvement.Value)
-	assert.Equal(t, float64(expectedAverageUtilizationMeasurement), improvement.Utilization)
+	improvement := wasMeasurement.Sub(nowMeasurement)
+	assert.Equal(t, quantityAsFloat64(expectedAverageValueMeasurement), improvement.Value)
+	assert.InDelta(t, float64(expectedAverageUtilizationMeasurement), improvement.Utilization, 0.01)
 }
 
 func TestMeasurement_Scale(t *testing.T) {
@@ -40,8 +40,8 @@ func TestMeasurement_Scale(t *testing.T) {
 	assert.NoError(t, err)
 
 	scaledMeasurement := wasMeasurement.Scale(factor)
-	assert.Equal(t, float64FromQuantityUnsafe(expectedAverageValue), scaledMeasurement.Value)
-	assert.Equal(t, float64(expectedAverageUtilization), scaledMeasurement.Utilization)
+	assert.Equal(t, quantityAsFloat64(expectedAverageValue), scaledMeasurement.Value)
+	assert.InDelta(t, float64(expectedAverageUtilization), scaledMeasurement.Utilization, 0.01)
 }
 
 func TestNewAverageMeasurement(t *testing.T) {
@@ -61,8 +61,8 @@ func TestNewAverageMeasurement(t *testing.T) {
 
 	averageMeasurement := NewAverageMeasurement(improvementOne, improvementTwo)
 	assert.Equal(t, 2, averageMeasurement.Among)
-	assert.Equal(t, float64FromQuantityUnsafe(expectedAvgAverageValue), averageMeasurement.Value.Value)
-	assert.Equal(t, float64(expectedAvgAverageUtilization), averageMeasurement.Value.Utilization)
+	assert.Equal(t, quantityAsFloat64(expectedAvgAverageValue), averageMeasurement.Value.Value)
+	assert.InDelta(t, float64(expectedAvgAverageUtilization), averageMeasurement.Value.Utilization, 0.01)
 }
 
 func TestAverageMeasurement_Concat(t *testing.T) {
@@ -89,6 +89,25 @@ func TestAverageMeasurement_Concat(t *testing.T) {
 
 	firstAndMedianAndLastMeasurement := firstAndMedianMeasurement.Concat(improvementLast)
 	assert.Equal(t, 3, firstAndMedianAndLastMeasurement.Among)
-	assert.Equal(t, float64FromQuantityUnsafe(expectedAvgAverageValue), firstAndMedianAndLastMeasurement.Value.Value)
-	assert.Equal(t, float64(expectedAvgAverageUtilization), firstAndMedianAndLastMeasurement.Value.Utilization)
+	assert.Equal(t, quantityAsFloat64(expectedAvgAverageValue), firstAndMedianAndLastMeasurement.Value.Value)
+	assert.InDelta(t, float64(expectedAvgAverageUtilization), firstAndMedianAndLastMeasurement.Value.Utilization, 0.01)
+}
+
+func TestMeasurement_GoesInto(t *testing.T) {
+	firstAverageUtilization := int32(80)
+	firstAverageValue, err := resource.ParseQuantity("100Mi")
+	assert.NoError(t, err)
+	fullSmallerMeasurement := NewMeasurement(firstAverageValue, &firstAverageUtilization)
+
+	secondAverageUtilization := int32(160)
+	secondAverageValue, err := resource.ParseQuantity("200Mi")
+	assert.NoError(t, err)
+	fullBiggerMeasurement := NewMeasurement(secondAverageValue, &secondAverageUtilization)
+
+	assert.InDelta(t, float64(2), fullSmallerMeasurement.GoesInto(fullBiggerMeasurement), 0.01)
+
+	onlyValSmallerMeasurement := NewMeasurement(firstAverageValue, nil)
+	onlyValBiggerMeasurement := NewMeasurement(secondAverageValue, nil)
+
+	assert.InDelta(t, float64(2), onlyValSmallerMeasurement.GoesInto(onlyValBiggerMeasurement), 0.01)
 }

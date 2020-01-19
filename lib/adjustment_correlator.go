@@ -1,10 +1,6 @@
 package lib
 
 import (
-	"strconv"
-
-	"k8s.io/apimachinery/pkg/api/resource"
-
 	"github.com/wingsofovnia/metrics-webhook/pkg/apis/metrics/v1alpha1"
 )
 
@@ -29,7 +25,7 @@ type AdjustmentCorrelator struct {
 	averageCorrelations AverageCorrelations
 }
 
-const minAdjustmentsBufferFlushCap = 2
+const minAdjustmentsBufferFlushCap = 3
 
 func NewAdjustmentCorrelator(adjustmentsBufferFlushCap int) *AdjustmentCorrelator {
 	return &AdjustmentCorrelator{
@@ -39,21 +35,13 @@ func NewAdjustmentCorrelator(adjustmentsBufferFlushCap int) *AdjustmentCorrelato
 }
 
 func NewDefaultAdjustmentCorrelator() *AdjustmentCorrelator {
-	return NewAdjustmentCorrelator(minAdjustmentsBufferFlushCap)
+	return NewAdjustmentCorrelator(minAdjustmentsBufferFlushCap * minAdjustmentsBufferFlushCap)
 }
 
 func (c *AdjustmentCorrelator) RegisterAdjustments(report v1alpha1.MetricReport, appliedAdjustments Adjustments) {
 	reportedMeasurements := make(Measurements)
 	for _, m := range report {
-		utilization := float64(0)
-		if m.CurrentAverageUtilization != nil {
-			utilization = float64(*m.CurrentAverageUtilization)
-		}
-
-		reportedMeasurements[m.Name] = Measurement{
-			Value:       float64FromQuantityUnsafe(m.CurrentAverageValue),
-			Utilization: utilization,
-		}
+		reportedMeasurements[m.Name] = NewMeasurement(m.CurrentAverageValue, m.CurrentAverageUtilization)
 	}
 	c.adjustmentsBuffer = append(c.adjustmentsBuffer, AdjustmentRound{
 		Measurements: reportedMeasurements,
@@ -78,13 +66,13 @@ func (c *AdjustmentCorrelator) RegisterAdjustments(report v1alpha1.MetricReport,
 //		[2] measurements = [40  (cpu utilization), 10 (ram)], adjustments = []
 //
 //	In Stage 1:
-//		[0] [(quality = -8),(pages = -4)] -> [40 (100[0] - 60[1], cpu utilization improvement), 20 (40[0] - 20[1], ram improvement)]
-//		[1] [(quality = -6),(pages = -2)] -> [20 (60[1] - 40[2],  cpu utilization improvement), 10 (20[1] - 10[2], ram improvement)]
+//		[0] [(quality = -8),(pages = -4)] -> [40 (100[0] - 60[1], cpu improvement), 20 (40[0] - 20[1], ram improvement)]
+//		[1] [(quality = -6),(pages = -2)] -> [20 (60[1] - 40[2],  cpu improvement), 10 (20[1] - 10[2], ram improvement)]
 //
 //  In Stage 2:
 //		(quality = 1) -> {
-//			"cpu utilization improvement": [
-//				[0]		-2.5 (40/2/-8),																				 2 = len(improvements)
+//			"cpu improvement": [
+//				[0]		-2.5 (40/2/-8), 2 = len(improvements)
 //				[1]		-1.6 (20/2/-6),
 //			],
 //			"ram improvement": [
@@ -93,7 +81,7 @@ func (c *AdjustmentCorrelator) RegisterAdjustments(report v1alpha1.MetricReport,
 //			]
 //		},
 //		(pages = 1)   -> {
-//			"cpu utilization improvement": [
+//			"cpu improvement": [
 //				[0]		-5   (40/2/-4),
 //				[1]		-5   (20/2/-2),
 //			],
@@ -105,12 +93,12 @@ func (c *AdjustmentCorrelator) RegisterAdjustments(report v1alpha1.MetricReport,
 //
 //	In Stage 3:
 //		(quality = 1) -> {
-//			"cpu utilization improvement": -2.05 ((-2.5 + -1.6) / 2),
-//			"ram improvement":             -1.04 ((-1.25 + -0.83) / 2),
+//			"cpu improvement":	-2.05 ((-2.5 + -1.6) / 2),
+//			"ram improvement":	-1.04 ((-1.25 + -0.83) / 2),
 //		},
 //		(pages = 1)   -> {
-//			"cpu utilization improvement": -5    ((-5 + -5) / 2),
-//			"ram improvement":             -2.5  ((-2.5 + -2.5) / 2),
+//			"cpu improvement":	-5    ((-5 + -5) / 2),
+//			"ram improvement":	-2.5  ((-2.5 + -2.5) / 2),
 //		},
 func (c *AdjustmentCorrelator) Recorrelate() {
 	if len(c.adjustmentsBuffer) < c.adjustmentsBufferFlushCap {
@@ -131,7 +119,7 @@ func (c *AdjustmentCorrelator) Recorrelate() {
 		roundImprovements := make(Measurements)
 		for metric, prevMeasurement := range prevRound.Measurements {
 			currMeasurement := currRound.Measurements[metric]
-			roundImprovements[metric] = NewMeasurementDelta(prevMeasurement, currMeasurement)
+			roundImprovements[metric] = prevMeasurement.Sub(currMeasurement)
 		}
 
 		// Stage 2
@@ -172,7 +160,7 @@ func (c *AdjustmentCorrelator) Recorrelate() {
 }
 
 func (c *AdjustmentCorrelator) SuggestAdjustments(metricsReported v1alpha1.MetricReport) Adjustments {
-	targetMeasurements := make(Measurements)
+	targetImprovements := make(Measurements)
 	for _, notification := range metricsReported {
 		if notification.Type != v1alpha1.Alert {
 			continue
@@ -185,42 +173,30 @@ func (c *AdjustmentCorrelator) SuggestAdjustments(metricsReported v1alpha1.Metri
 
 		var valueImprovementNeeded float64
 		if notification.TargetAverageValue != nil {
-			valueImprovementNeeded = float64FromQuantityUnsafe(notification.CurrentAverageValue) - float64FromQuantityUnsafe(*notification.TargetAverageValue)
+			notification.CurrentAverageValue.DeepCopy()
+			valueImprovementNeeded = quantityAsFloat64(notification.CurrentAverageValue) - quantityAsFloat64(*notification.TargetAverageValue)
 		}
 
 		if utilizationImprovementNeeded > 0 || valueImprovementNeeded > 0 {
-			targetMeasurements[notification.Name] = Measurement{
+			targetImprovements[notification.Name] = Measurement{
 				Value:       valueImprovementNeeded,
 				Utilization: utilizationImprovementNeeded,
 			}
 		}
 	}
 
-	if len(targetMeasurements) == 0 {
+	if len(targetImprovements) == 0 {
 		return nil
 	}
 
 	suggestions := make(Adjustments)
 	for config, correlations := range c.averageCorrelations {
-		for metric, improvement := range correlations {
-			if reqImprovement, requested := targetMeasurements[metric]; requested {
-				suggestions[config] = reqImprovement.Divide(improvement.Value) / float64(len(correlations))
+		for metric, metricIncImprovement := range correlations {
+			if targetImprovement, requested := targetImprovements[metric]; requested {
+				suggestions[config] = metricIncImprovement.Value.GoesInto(targetImprovement) / float64(len(correlations))
 			}
 		}
 	}
 
 	return suggestions
-}
-
-func float64FromQuantity(q resource.Quantity) (float64, error) {
-	qCp := (&q).DeepCopy()
-	return strconv.ParseFloat((&qCp).AsDec().String(), 64)
-}
-
-func float64FromQuantityUnsafe(q resource.Quantity) float64 {
-	f, err := float64FromQuantity(q)
-	if err != nil {
-		panic(err)
-	}
-	return f
 }

@@ -210,12 +210,12 @@ func TestAdjustmentCorrelator_Recorrelate_Multiple(t *testing.T) {
 	assert.Contains(t, correlator.averageCorrelations["quality"], "ram")
 	assert.Equal(t, 2, correlator.averageCorrelations["quality"]["cpu"].Among)
 	assert.InDelta(t,
-		(50.0/2.0/-5.0 + 100.0/2.0/-5.0) / 2,
+		(50.0/2.0/-5.0+100.0/2.0/-5.0)/2,
 		correlator.averageCorrelations["quality"]["cpu"].Value.Utilization,
 		0.1)
 	assert.Equal(t, 2, correlator.averageCorrelations["quality"]["ram"].Among)
 	assert.InDelta(t,
-		(50.0/2.0/-5.0 + 100.0/2.0/-5.0) / 2,
+		(50.0/2.0/-5.0+100.0/2.0/-5.0)/2,
 		correlator.averageCorrelations["quality"]["ram"].Value.Utilization,
 		0.1)
 
@@ -224,12 +224,12 @@ func TestAdjustmentCorrelator_Recorrelate_Multiple(t *testing.T) {
 	assert.Contains(t, correlator.averageCorrelations["pages"], "ram")
 	assert.Equal(t, 2, correlator.averageCorrelations["pages"]["cpu"].Among)
 	assert.InDelta(t,
-		(50.0/2.0/-5.0 + 100.0/2.0/-5.0) / 2,
+		(50.0/2.0/-5.0+100.0/2.0/-5.0)/2,
 		correlator.averageCorrelations["pages"]["cpu"].Value.Utilization,
 		0.1)
 	assert.Equal(t, 2, correlator.averageCorrelations["pages"]["ram"].Among)
 	assert.InDelta(t,
-		(50.0/2.0/-5.0 + 100.0/2.0/-5.0) / 2,
+		(50.0/2.0/-5.0+100.0/2.0/-5.0)/2,
 		correlator.averageCorrelations["pages"]["ram"].Value.Utilization,
 		0.1)
 }
