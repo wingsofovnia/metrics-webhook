@@ -10,7 +10,8 @@ import (
 )
 
 func TestAdjustmentCorrelator_Recorrelate(t *testing.T) {
-	correlator := NewAdjustmentCorrelator(-1) // cap < 1 ~ manual Recorrelation()
+	correlator, err := NewAdjustmentCorrelator(-1, 0.0) // cap < 1 ~ manual Recorrelation()
+	assert.NoError(t, err)
 
 	// Round one
 	correlator.RegisterAdjustments(
@@ -101,7 +102,8 @@ func TestAdjustmentCorrelator_Recorrelate(t *testing.T) {
 }
 
 func TestAdjustmentCorrelator_Recorrelate_Multiple(t *testing.T) {
-	correlator := NewAdjustmentCorrelator(-1) // cap < 1 ~ manual Recorrelation()
+	correlator, err := NewAdjustmentCorrelator(-1, 0.0) // cap < 1 ~ manual Recorrelation()
+	assert.NoError(t, err)
 
 	// 50 improvement for -5, -5 adjustment
 	correlator.RegisterAdjustments(
@@ -235,7 +237,8 @@ func TestAdjustmentCorrelator_Recorrelate_Multiple(t *testing.T) {
 }
 
 func TestAdjustmentCorrelator_SuggestAdjustments(t *testing.T) {
-	correlator := NewAdjustmentCorrelator(-1) // cap < 1 ~ manual Recorrelation()
+	correlator, err := NewAdjustmentCorrelator(-1, 0.0) // cap < 1 ~ manual Recorrelation()
+	assert.NoError(t, err)
 
 	// Round one
 	correlator.RegisterAdjustments(

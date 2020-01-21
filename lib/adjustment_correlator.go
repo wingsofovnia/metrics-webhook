@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"fmt"
 	"github.com/wingsofovnia/metrics-webhook/pkg/apis/metrics/v1alpha1"
 )
 
@@ -22,20 +23,29 @@ type AdjustmentCorrelator struct {
 	adjustmentsBuffer         []AdjustmentRound
 	adjustmentsBufferFlushCap int
 
+	overshoot float64
+
 	averageCorrelations AverageCorrelations
 }
 
+const defaultOvershoot = 0.10
 const minAdjustmentsBufferFlushCap = 3
 
-func NewAdjustmentCorrelator(adjustmentsBufferFlushCap int) *AdjustmentCorrelator {
+func NewAdjustmentCorrelator(adjustmentsBufferFlushCap int, overshoot float64) (*AdjustmentCorrelator, error) {
+	if overshoot > 1 || overshoot < -1 {
+		return nil, fmt.Errorf("overshoot must be in (-1, 1) interval")
+	}
+
 	return &AdjustmentCorrelator{
 		adjustmentsBufferFlushCap: adjustmentsBufferFlushCap,
 		averageCorrelations:       make(AverageCorrelations),
-	}
+		overshoot:                 overshoot,
+	}, nil
 }
 
 func NewDefaultAdjustmentCorrelator() *AdjustmentCorrelator {
-	return NewAdjustmentCorrelator(minAdjustmentsBufferFlushCap * minAdjustmentsBufferFlushCap)
+	c, _ := NewAdjustmentCorrelator(minAdjustmentsBufferFlushCap*minAdjustmentsBufferFlushCap, defaultOvershoot)
+	return c
 }
 
 func (c *AdjustmentCorrelator) RegisterAdjustments(report v1alpha1.MetricReport, appliedAdjustments Adjustments) {
@@ -193,7 +203,8 @@ func (c *AdjustmentCorrelator) SuggestAdjustments(metricsReported v1alpha1.Metri
 	for config, correlations := range c.averageCorrelations {
 		for metric, metricIncImprovement := range correlations {
 			if targetImprovement, requested := targetImprovements[metric]; requested {
-				suggestions[config] = metricIncImprovement.Value.GoesInto(targetImprovement) / float64(len(correlations))
+				baseSuggestion := metricIncImprovement.Value.GoesInto(targetImprovement) / float64(len(correlations))
+				suggestions[config] = baseSuggestion + baseSuggestion * c.overshoot
 			}
 		}
 	}
