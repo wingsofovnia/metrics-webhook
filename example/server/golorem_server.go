@@ -56,7 +56,7 @@ func main() {
 
 		correlator := lib.NewDefaultAdjustmentCorrelator()
 
-		webhookServer := lib.NewWebhookServer(lib.DefaultWebhookServerConfig(), func(report v1alpha1.MetricReport) {
+		webhookServer := lib.NewWebhookServer(func(report v1alpha1.MetricReport) {
 			adjustments := make(lib.Adjustments)
 
 			log.Infof("Incoming notifications: %s", report.String())

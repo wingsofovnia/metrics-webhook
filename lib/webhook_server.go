@@ -53,8 +53,11 @@ func DefaultWebhookServerConfig() *WebhookServerConfig {
 	}
 }
 
-func NewWebhookServer(cfg *WebhookServerConfig, callback Webhook) *WebhookServer {
-	if cfg == nil {
+func NewWebhookServer(callback Webhook, cfgs ...*WebhookServerConfig) *WebhookServer {
+	var cfg *WebhookServerConfig
+	if len(cfgs) > 0 && cfgs[0] != nil {
+		cfg = cfgs[0]
+	} else {
 		cfg = DefaultWebhookServerConfig()
 	}
 
