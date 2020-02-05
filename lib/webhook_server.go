@@ -3,11 +3,11 @@ package lib
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/sirupsen/logrus"
 
 	"github.com/wingsofovnia/metrics-webhook/pkg/apis/metrics/v1alpha1"
 )
@@ -25,6 +25,7 @@ var WebhookHandler = func(callback Webhook) func(w http.ResponseWriter, r *http.
 		var report v1alpha1.MetricReport
 		err := decoder.Decode(&report)
 		if err != nil {
+			log.Printf("[Webhook] ERR: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -34,7 +35,6 @@ var WebhookHandler = func(callback Webhook) func(w http.ResponseWriter, r *http.
 
 type WebhookServer struct {
 	httpServer *http.Server
-	logger     *logrus.Logger
 }
 
 type WebhookServerConfig struct {
@@ -42,7 +42,6 @@ type WebhookServerConfig struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
-	Logger       *logrus.Logger
 	WebhookPath  string
 }
 
@@ -61,13 +60,6 @@ func NewWebhookServer(cfg *WebhookServerConfig, callback Webhook) *WebhookServer
 		cfg = DefaultWebhookServerConfig()
 	}
 
-	var logger *logrus.Logger
-	if cfg.Logger == nil {
-		logger = logrus.New()
-	} else {
-		logger = cfg.Logger
-	}
-
 	router := mux.NewRouter()
 	router.HandleFunc(cfg.WebhookPath, WebhookHandler(callback)).Methods(http.MethodPost)
 
@@ -79,15 +71,14 @@ func NewWebhookServer(cfg *WebhookServerConfig, callback Webhook) *WebhookServer
 			IdleTimeout:  cfg.IdleTimeout,
 			Handler:      router,
 		},
-		logger: logger,
 	}
 }
 
 func (srv *WebhookServer) ListenAndServe() {
-	srv.logger.Infof("[Webhook] Listening and serving on %s", srv.httpServer.Addr)
+	log.Printf("[Webhook] Listening and serving on %s", srv.httpServer.Addr)
 	go func() {
 		if err := srv.httpServer.ListenAndServe(); err != nil {
-			srv.logger.Error(err)
+			log.Printf("[Webhook] ERR: %v", err)
 		}
 	}()
 }
