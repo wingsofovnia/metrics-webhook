@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/mux"
-
 	"github.com/wingsofovnia/metrics-webhook/pkg/apis/metrics/v1alpha1"
 )
 
@@ -60,8 +58,8 @@ func NewWebhookServer(cfg *WebhookServerConfig, callback Webhook) *WebhookServer
 		cfg = DefaultWebhookServerConfig()
 	}
 
-	router := mux.NewRouter()
-	router.HandleFunc(cfg.WebhookPath, WebhookHandler(callback)).Methods(http.MethodPost)
+	router := http.NewServeMux()
+	router.HandleFunc(cfg.WebhookPath, WebhookHandler(callback))
 
 	return &WebhookServer{
 		httpServer: &http.Server{
