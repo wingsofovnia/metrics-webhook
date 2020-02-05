@@ -12,6 +12,26 @@ import (
 	"github.com/wingsofovnia/metrics-webhook/pkg/apis/metrics/v1alpha1"
 )
 
+type Webhook func(report v1alpha1.MetricReport)
+
+var WebhookHandler = func(callback Webhook) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		decoder := json.NewDecoder(r.Body)
+		var report v1alpha1.MetricReport
+		err := decoder.Decode(&report)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		callback(report)
+	}
+}
+
 type WebhookServer struct {
 	httpServer *http.Server
 	logger     *logrus.Logger
@@ -36,8 +56,6 @@ func DefaultWebhookServerConfig() *WebhookServerConfig {
 	}
 }
 
-type Webhook func(report v1alpha1.MetricReport)
-
 func NewWebhookServer(cfg *WebhookServerConfig, callback Webhook) *WebhookServer {
 	if cfg == nil {
 		cfg = DefaultWebhookServerConfig()
@@ -51,17 +69,7 @@ func NewWebhookServer(cfg *WebhookServerConfig, callback Webhook) *WebhookServer
 	}
 
 	router := mux.NewRouter()
-	router.HandleFunc(cfg.WebhookPath, func(w http.ResponseWriter, r *http.Request) {
-		decoder := json.NewDecoder(r.Body)
-		var report v1alpha1.MetricReport
-		err := decoder.Decode(&report)
-		if err != nil {
-			logger.Error(err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		callback(report)
-	}).Methods(http.MethodPost)
+	router.HandleFunc(cfg.WebhookPath, WebhookHandler(callback)).Methods(http.MethodPost)
 
 	return &WebhookServer{
 		httpServer: &http.Server{
