@@ -8,10 +8,10 @@ minikube status
 
 # Build golorem to minikube repository
 $ eval $(minikube docker-env)
-$ docker build -t docker.io/wingsofovnia/metrics-webhook/golorem:0.1 -f example/server/Dockerfile .
+$ docker build -t docker.io/iovchynnikov/golorem:0.1 -f example/server/Dockerfile .
 
 # Run golorem with memory restriction
-$ kubectl run golorem --image=docker.io/wingsofovnia/metrics-webhook/golorem:0.1 --requests=memory=100Mi --limits=memory=100Mi --port=8080
+$ kubectl run golorem --image=docker.io/iovchynnikov/golorem:0.1 --requests=memory=100Mi --limits=memory=100Mi --port=8080
 
 # Expose golorem service
 $ kubectl expose deployment golorem --type=NodePort

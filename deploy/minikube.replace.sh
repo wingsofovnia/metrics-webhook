@@ -3,7 +3,7 @@ cd ../ || exit
 minikube status
 
 eval $(minikube docker-env)
-operator-sdk build docker.io/wingsofovnia/metrics-webhook
+operator-sdk build docker.io/iovchynnikov/metrics-webhook
 eval $(minikube docker-env --unset)
 
 kubectl replace --force -f deploy/service_account.yaml

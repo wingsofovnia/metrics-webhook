@@ -15,7 +15,7 @@ spec:
       serviceAccountName: metrics-webhook
       containers:
         - name: metrics-webhook
-          image: docker.io/wingsofovnia/metrics-webhook:latest
+          image: docker.io/iovchynnikov/metrics-webhook:latest
           command:
             - metrics-webhook
           imagePullPolicy: IfNotPresent
