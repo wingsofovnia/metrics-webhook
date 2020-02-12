@@ -1,11 +1,11 @@
 apiVersion: metrics.wingsofovnia.github.com/v1alpha1
 kind: MetricWebhook
 metadata:
-  name: golorem-metricwebhook
+  name: gorand-metricwebhook
 spec:
   selector:
     matchLabels:
-      run: golorem
+      run: gorand
   webhook:
     port: 4030
     path: /metrics-webhook
@@ -14,5 +14,5 @@ spec:
   metrics:
     - type: Resource
       resource:
-        name: memory
-        targetAverageUtilization: 10
+        name: cpu
+        targetAverageUtilization: 50

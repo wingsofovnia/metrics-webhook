@@ -1,16 +1,16 @@
 apiVersion: autoscaling/v2beta1
 kind: HorizontalPodAutoscaler
 metadata:
-  name: golorem-hpa
+  name: gorand-hpa
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: golorem
+    name: gorand
   minReplicas: 1
-  maxReplicas: 1
+  maxReplicas: 3
   metrics:
     - type: Resource
       resource:
-        name: memory
-        targetAverageUtilization: 90
+        name: cpu
+        targetAverageUtilization: 70
